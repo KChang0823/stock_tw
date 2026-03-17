@@ -5,3 +5,5 @@ FinMind
 yfinance
 openpyxl
 tqdm
+requests
+beautifulsoup4

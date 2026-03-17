@@ -49,7 +49,6 @@ st.markdown("""
 if 'etf_list' not in st.session_state:
     st.session_state.etf_list = []
 
-@st.cache_resource
 def get_engine():
     loader = StockDataLoader()
     return ValuationEngine(loader)
