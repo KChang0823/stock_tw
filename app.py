@@ -57,7 +57,7 @@ engine = get_engine()
 
 # --- UI 佈局 ---
 
-st.title("高股息 ETF 成份股評估系統")
+st.title("ETF 成份股評估系統")
 
 # 1. ETF 搜尋區域
 col_input, _ = st.columns([2, 5])
