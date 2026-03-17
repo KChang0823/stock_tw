@@ -5,7 +5,7 @@ from data_loader import StockDataLoader
 
 # --- 頁面配置 ---
 st.set_page_config(
-    page_title="高股息 ETF 價值選股器",
+    page_title="ETF 成份股評估系統",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="collapsed"
