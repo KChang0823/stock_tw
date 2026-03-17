@@ -82,12 +82,20 @@ if st.session_state.etf_list:
                 st.session_state.etf_list.remove(etf_id)
                 st.rerun()
 
+@st.cache_data(ttl=3600)
+def cached_valuation(sid):
+    """快取單檔股票的估價結果，避免重複 API 請求"""
+    try:
+        return engine.get_valuation_data(sid)
+    except:
+        return None
+
 # 3. 展開成份股並計算
 if st.session_state.etf_list:
     st.divider()
     
     all_constituents = set()
-    with st.spinner("正在解析成份股與計算估價..."):
+    with st.spinner("正在解析成份股與計算估價 (首次載入需時較長)..."):
         for etf_id in st.session_state.etf_list:
             constituents = engine.loader.get_etf_constituents(etf_id)
             if constituents:
@@ -99,13 +107,19 @@ if st.session_state.etf_list:
         stock_list = sorted(list(all_constituents))
         
         results = []
-        for sid in stock_list:
-            try:
-                data = engine.get_valuation_data(sid)
-                if "error" not in data:
-                    results.append(data)
-            except:
-                continue
+        # 使用進度條讓用戶知道進度
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        for i, sid in enumerate(stock_list):
+            status_text.text(f"正在分析 ({i+1}/{len(stock_list)}): {sid}")
+            data = cached_valuation(sid)
+            if data and "error" not in data:
+                results.append(data)
+            progress_bar.progress((i + 1) / len(stock_list))
+        
+        status_text.empty()
+        progress_bar.empty()
 
     if results:
         st.subheader(f"📊 成份股綜合評比 (共 {len(results)} 檔)")
