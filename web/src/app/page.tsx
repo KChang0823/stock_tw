@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@supabase/supabase-js'
-import { Search, ArrowUpDown, Settings, X } from 'lucide-react'
+import { Search, ArrowUpDown, Settings, X, Plus, Loader2 } from 'lucide-react'
 
 function getSupabase() {
   return createClient(
@@ -65,6 +65,9 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [fontSize, setFontSize] = useState(15)
   const [showSettings, setShowSettings] = useState(false)
+  const [newEtfId, setNewEtfId] = useState('')
+  const [addingEtf, setAddingEtf] = useState(false)
+  const [addMsg, setAddMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   // 從 localStorage 讀取字級偏好
   useEffect(() => {
@@ -99,6 +102,39 @@ export default function Home() {
       else next.add(id)
       return next
     })
+  }
+
+  const addEtf = async () => {
+    const id = newEtfId.trim()
+    if (!id) return
+    setAddingEtf(true)
+    setAddMsg(null)
+    try {
+      const res = await fetch('/api/etf/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ etf_id: id }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setAddMsg({ type: 'err', text: data.error })
+      } else {
+        setAddMsg({ type: 'ok', text: data.message })
+        setNewEtfId('')
+        // 重新載入資料
+        const sb = getSupabase()
+        const [etfRes, stockRes] = await Promise.all([
+          sb.from('tracked_etfs').select('*'),
+          sb.from('stock_valuations').select('*'),
+        ])
+        setEtfs(etfRes.data || [])
+        setStocks(stockRes.data || [])
+        setSelectedEtfs(new Set((etfRes.data || []).map((e: Etf) => e.etf_id)))
+      }
+    } catch {
+      setAddMsg({ type: 'err', text: '網路錯誤，請稍後再試' })
+    }
+    setAddingEtf(false)
   }
 
   const handleSort = (key: SortKey) => {
@@ -254,7 +290,7 @@ export default function Home() {
           />
         </div>
 
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           {etfs.map(etf => (
             <button
               key={etf.etf_id}
@@ -265,7 +301,63 @@ export default function Home() {
               <span style={{ opacity: 0.7 }}>{etf.name}</span>
             </button>
           ))}
+
+          {/* 新增 ETF */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <input
+              type="text"
+              placeholder="輸入 ETF 代號"
+              value={newEtfId}
+              onChange={e => setNewEtfId(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addEtf()}
+              disabled={addingEtf}
+              style={{
+                width: 120,
+                padding: '6px 12px',
+                borderRadius: 9999,
+                border: '1px solid #E2E8F0',
+                fontSize: 13,
+                outline: 'none',
+              }}
+            />
+            <button
+              onClick={addEtf}
+              disabled={addingEtf || !newEtfId.trim()}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 9999,
+                border: '1px solid #3B82F6',
+                background: '#3B82F6',
+                color: 'white',
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: addingEtf || !newEtfId.trim() ? 'not-allowed' : 'pointer',
+                opacity: addingEtf || !newEtfId.trim() ? 0.5 : 1,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                transition: 'opacity 0.2s',
+              }}
+            >
+              {addingEtf ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+              匯入
+            </button>
+          </div>
         </div>
+
+        {/* 匯入結果訊息 */}
+        {addMsg && (
+          <div style={{
+            marginTop: 8,
+            padding: '8px 14px',
+            borderRadius: 8,
+            fontSize: 13,
+            background: addMsg.type === 'ok' ? '#ECFDF5' : '#FEF2F2',
+            color: addMsg.type === 'ok' ? '#059669' : '#DC2626',
+          }}>
+            {addMsg.text}
+          </div>
+        )}
       </div>
 
       {/* Table */}
