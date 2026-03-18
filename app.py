@@ -122,15 +122,16 @@ if st.session_state.etf_list:
                 errors += 1
             progress_bar.progress((i + 1) / len(stock_list))
             
-            # 若不是最後一檔且不是 cached，則稍微延遲避免 API 被擋
-            # 這裡簡單處理：每檔都睡 0.2s，50 檔約 10s，可大幅增加穩定性
-            time.sleep(0.25)
+            # 對於 Guest 帳號，FinMind 有嚴格速率限制
+            # 增加延遲到 0.4s，50 檔約 20 秒，換取更高成功率
+            time.sleep(0.4)
         
         status_text.empty()
         progress_bar.empty()
         
         if errors > 0:
-            st.warning(f"註：有 {errors} 檔股票因數據不全或連線限制被跳過。")
+            st.warning(f"目前有 {errors} 檔股票因 API 流量控制（Guest 限制）讀取失敗。")
+            st.info("💡 提示：系統已實作快取，您可以試著「再次點擊新增」或「重新整理」，剛才成功的股票將秒開，並繼續抓取剩餘清單。")
 
     if results:
         st.subheader(f"📊 成份股綜合評比 (共 {len(results)} 檔)")
