@@ -61,7 +61,13 @@ def main():
             sb.table("etf_constituents").insert(rows).execute()
             print(f"  {etf_id}: 已同步 {len(rows)} 檔")
     
-    # 4. 對每檔股票計算估價
+    # 4. 建立 stock -> [etf_ids] 反向對照
+    stock_to_etfs = {}
+    for etf_id, stocks in etf_constituents_map.items():
+        for sid in stocks:
+            stock_to_etfs.setdefault(sid, []).append(etf_id)
+    
+    # 5. 對每檔股票計算估價
     stock_list = sorted(list(all_stocks))
     total = len(stock_list)
     success = 0
@@ -78,6 +84,7 @@ def main():
                 failed += 1
             else:
                 # Upsert 到 Supabase
+                etf_sources = ",".join(sorted(stock_to_etfs.get(sid, [])))
                 row = {
                     "stock_id": sid,
                     "current_price": data["current_price"],
@@ -92,6 +99,7 @@ def main():
                     "sell_low": data["valuation"]["sell_low"],
                     "sell_high": data["valuation"]["sell_high"],
                     "signal": data["signal"],
+                    "etf_sources": etf_sources,
                     "updated_at": datetime.datetime.now().isoformat()
                 }
                 sb.table("stock_valuations").upsert(row).execute()
