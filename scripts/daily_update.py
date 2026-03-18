@@ -10,6 +10,8 @@ import sys
 import os
 import time
 import datetime
+import pandas as pd
+import numpy as np
 
 # 確保能 import 專案根目錄的模組
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -18,6 +20,12 @@ from data_loader import StockDataLoader
 from valuation_engine import ValuationEngine
 from scripts.supabase_client import get_supabase_client
 
+
+def sanitize_val(val):
+    """將 NaN, Inf 轉換為 0.0 避免 Supabase JSON 寫入錯誤"""
+    if val is None or (isinstance(val, (float, np.float64)) and (np.isnan(val) or np.isinf(val))):
+        return 0.0
+    return float(val)
 
 def main():
     print(f"=== 開始每日估價更新 ({datetime.datetime.now()}) ===")
@@ -105,17 +113,17 @@ def main():
                 row = {
                     "stock_id": sid,
                     "company_name": company_name,
-                    "current_price": data["current_price"],
-                    "eps_low": data["eps_predict"]["low"],
-                    "eps_high": data["eps_predict"]["high"],
-                    "cash_dividend_low": data["dividend_predict"]["cash_low"],
-                    "cash_dividend_high": data["dividend_predict"]["cash_high"],
-                    "stock_dividend_low": data["dividend_predict"]["stock_low"],
-                    "stock_dividend_high": data["dividend_predict"]["stock_high"],
-                    "buy_low": data["valuation"]["buy_low"],
-                    "buy_high": data["valuation"]["buy_high"],
-                    "sell_low": data["valuation"]["sell_low"],
-                    "sell_high": data["valuation"]["sell_high"],
+                    "current_price": sanitize_val(data["current_price"]),
+                    "eps_low": sanitize_val(data["eps_predict"]["low"]),
+                    "eps_high": sanitize_val(data["eps_predict"]["high"]),
+                    "cash_dividend_low": sanitize_val(data["dividend_predict"]["cash_low"]),
+                    "cash_dividend_high": sanitize_val(data["dividend_predict"]["cash_high"]),
+                    "stock_dividend_low": sanitize_val(data["dividend_predict"]["stock_low"]),
+                    "stock_dividend_high": sanitize_val(data["dividend_predict"]["stock_high"]),
+                    "buy_low": sanitize_val(data["valuation"]["buy_low"]),
+                    "buy_high": sanitize_val(data["valuation"]["buy_high"]),
+                    "sell_low": sanitize_val(data["valuation"]["sell_low"]),
+                    "sell_high": sanitize_val(data["valuation"]["sell_high"]),
                     "signal": data["signal"],
                     "etf_sources": etf_sources,
                     "updated_at": datetime.datetime.now().isoformat()
