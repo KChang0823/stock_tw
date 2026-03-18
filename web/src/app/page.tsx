@@ -104,37 +104,75 @@ export default function Home() {
     })
   }
 
+  const [addProgress, setAddProgress] = useState(0)
+  const [addStep, setAddStep] = useState('')
+
   const addEtf = async () => {
     const id = newEtfId.trim()
     if (!id) return
     setAddingEtf(true)
     setAddMsg(null)
+    setAddProgress(0)
+    setAddStep('連線中...')
+
     try {
       const res = await fetch('/api/etf/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ etf_id: id }),
       })
-      const data = await res.json()
+
       if (!res.ok) {
+        const data = await res.json()
         setAddMsg({ type: 'err', text: data.error })
-      } else {
-        setAddMsg({ type: 'ok', text: data.message })
-        setNewEtfId('')
-        // 重新載入資料
-        const sb = getSupabase()
-        const [etfRes, stockRes] = await Promise.all([
-          sb.from('tracked_etfs').select('*'),
-          sb.from('stock_valuations').select('*'),
-        ])
-        setEtfs(etfRes.data || [])
-        setStocks(stockRes.data || [])
-        setSelectedEtfs(new Set((etfRes.data || []).map((e: Etf) => e.etf_id)))
+        setAddingEtf(false)
+        return
+      }
+
+      const reader = res.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          const text = decoder.decode(value)
+          const lines = text.split('\n').filter(l => l.startsWith('data: '))
+
+          for (const line of lines) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              if (data.progress) setAddProgress(data.progress)
+              if (data.step) setAddStep(data.step)
+
+              if (data.done) {
+                if (data.error) {
+                  setAddMsg({ type: 'err', text: data.error })
+                } else {
+                  setAddMsg({ type: 'ok', text: data.step })
+                  setNewEtfId('')
+                  // 重新載入資料
+                  const sb = getSupabase()
+                  const [etfRes, stockRes] = await Promise.all([
+                    sb.from('tracked_etfs').select('*'),
+                    sb.from('stock_valuations').select('*'),
+                  ])
+                  setEtfs(etfRes.data || [])
+                  setStocks(stockRes.data || [])
+                  setSelectedEtfs(new Set((etfRes.data || []).map((e: Etf) => e.etf_id)))
+                }
+              }
+            } catch { /* skip parse errors */ }
+          }
+        }
       }
     } catch {
       setAddMsg({ type: 'err', text: '網路錯誤，請稍後再試' })
     }
     setAddingEtf(false)
+    setAddProgress(0)
+    setAddStep('')
   }
 
   const handleSort = (key: SortKey) => {
@@ -344,6 +382,25 @@ export default function Home() {
             </button>
           </div>
         </div>
+
+        {/* 進度條 */}
+        {addingEtf && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: 13, color: '#475569' }}>{addStep}</span>
+              <span style={{ fontSize: 12, color: '#94A3B8' }}>{addProgress}%</span>
+            </div>
+            <div style={{ height: 6, borderRadius: 3, background: '#E2E8F0', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%',
+                width: `${addProgress}%`,
+                borderRadius: 3,
+                background: 'linear-gradient(90deg, #3B82F6, #60A5FA)',
+                transition: 'width 0.4s ease',
+              }} />
+            </div>
+          </div>
+        )}
 
         {/* 匯入結果訊息 */}
         {addMsg && (
