@@ -40,7 +40,17 @@ export async function POST(req: NextRequest) {
           return
         }
 
-        const html = await resp.text()
+        const buffer = await resp.arrayBuffer()
+        const decoder = new TextDecoder('big5')
+        const html = decoder.decode(buffer)
+        
+        // 解析 ETF 名稱 (從 <title> 提取，MoneyDJ 格式為 "元大臺灣ESG永續-00850.TW-...")
+        let etfName = etf_id
+        const titleMatch = html.match(/<title>([^<-]+)/i)
+        if (titleMatch && titleMatch[1]) {
+          etfName = titleMatch[1].trim()
+        }
+
         const matches = html.matchAll(/etfid=(\d{4,5})\.TW/g)
         const stockIds = [...new Set(
           Array.from(matches, m => m[1]).filter(id => id !== etf_id)
@@ -52,12 +62,12 @@ export async function POST(req: NextRequest) {
           return
         }
 
-        send(`找到 ${stockIds.length} 檔成份股，正在寫入資料庫...`, 30)
+        send(`找到 ${stockIds.length} 檔成份股 [${etfName}]，正在寫入資料庫...`, 30)
 
         // Step 2: Upsert tracked_etfs
         await supabase.from('tracked_etfs').upsert({
           etf_id,
-          name: `${etf_id}`,
+          name: etfName,
         }, { onConflict: 'etf_id' })
 
         send('寫入成份股對照表...', 45)
