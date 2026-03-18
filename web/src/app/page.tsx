@@ -33,10 +33,10 @@ type SortKey = 'stock_id' | 'current_price' | 'signal'
 type SortDir = 'asc' | 'desc'
 
 const FONT_SIZES = [
-  { label: '小', value: 13 },
-  { label: '中', value: 15 },
-  { label: '大', value: 18 },
-  { label: '特大', value: 22 },
+  { label: '小', value: 20 },
+  { label: '中', value: 28 },
+  { label: '大', value: 36 },
+  { label: '特大', value: 48 },
 ]
 
 function getSignalClass(signal: string | null) {
@@ -63,7 +63,7 @@ export default function Home() {
   const [sortKey, setSortKey] = useState<SortKey>('signal')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [loading, setLoading] = useState(true)
-  const [fontSize, setFontSize] = useState(15)
+  const [fontSize, setFontSize] = useState(28)
   const [showSettings, setShowSettings] = useState(false)
   const [newEtfId, setNewEtfId] = useState('')
   const [addingEtf, setAddingEtf] = useState(false)
