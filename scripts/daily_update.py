@@ -96,9 +96,15 @@ def main():
             else:
                 # Upsert 到 Supabase
                 etf_sources = ",".join(sorted(stock_to_etfs.get(sid, [])))
+                # 取得公司名 (若 map 中沒有則現場抓一次觸發備援)
+                company_name = stock_name_map.get(sid, '')
+                if not company_name:
+                    company_name = loader.get_stock_name(sid)
+                    if company_name: stock_name_map[sid] = company_name
+
                 row = {
                     "stock_id": sid,
-                    "company_name": stock_name_map.get(sid, ''),
+                    "company_name": company_name,
                     "current_price": data["current_price"],
                     "eps_low": data["eps_predict"]["low"],
                     "eps_high": data["eps_predict"]["high"],

@@ -1,6 +1,8 @@
 import pandas as pd
 from FinMind.data import DataLoader
 import datetime
+import yfinance as yf
+import re
 
 class StockDataLoader:
     def __init__(self, api_token: str = ""):
@@ -8,15 +10,36 @@ class StockDataLoader:
         if api_token:
             self.api.login(api_token)
         
+    def _get_yf_ticker(self, stock_id: str) -> str:
+        """輔助方法：將代號轉為 yfinance 格式 (.TW 或 .TWO)"""
+        # 簡單邏輯：4位數通常是上市 .TW，但為了精準，如果已知名稱抓不到可嘗試切換
+        # 這裡預設先用 .TW，若 yfinance info 為空再試 .TWO
+        return f"{stock_id}.TW"
+
     def get_stock_name(self, stock_id: str) -> str:
-        """獲取股票公司名稱"""
+        """獲取股票公司名稱 (優先 FinMind, 備援 yfinance)"""
+        # 1. Try FinMind
         try:
             df = self.api.taiwan_stock_info()
             row = df[df['stock_id'] == stock_id]
             if not row.empty:
-                return row.iloc[0].get('stock_name', '')
-        except Exception as e:
-            print(f"  ⚠ 無法取得 {stock_id} 公司名: {e}")
+                name = row.iloc[0].get('stock_name', '')
+                if name: return name
+        except:
+            pass
+
+        # 2. Try yfinance Fallback
+        try:
+            tk = yf.Ticker(self._get_yf_ticker(stock_id))
+            name = tk.info.get('longName') or tk.info.get('shortName')
+            if not name:
+                # 嘗試 .TWO (上櫃)
+                tk = yf.Ticker(f"{stock_id}.TWO")
+                name = tk.info.get('longName') or tk.info.get('shortName')
+            if name: return name
+        except:
+            pass
+            
         return ''
 
     def get_stock_price(self, stock_id: str, days: int = 30):
@@ -29,23 +52,62 @@ class StockDataLoader:
             start_date=start_date,
             end_date=end_date
         )
+        
+        # 備援 yfinance
+        if df.empty:
+            try:
+                tk = yf.Ticker(self._get_yf_ticker(stock_id))
+                hist = tk.history(period="1mo")
+                if not hist.empty:
+                    # 轉換為 FinMind 格式
+                    df = hist.reset_index()
+                    df.columns = [col.lower() for col in df.columns]
+                    # yfinance 的 columns 名稱不同，映射一下
+                    df = df.rename(columns={'date': 'date', 'close': 'close'})
+            except:
+                pass
         return df
 
     def get_eps_last_3_years(self, stock_id: str):
-        """獲取近三年的 Q1~Q4 EPS"""
+        """獲取近三年的 Q1~Q4 EPS (優先 FinMind, 備援 yfinance)"""
         current_year = datetime.date.today().year
         start_date = f"{current_year - 3}-01-01"
         
-        df = self.api.taiwan_stock_financial_statement(
-            stock_id=stock_id,
-            start_date=start_date
-        )
-        # 過濾出 EPS 並整理格式 (FinMind API 中通常為 'EPS')
-        eps_df = df[df['type'] == 'EPS'].copy()
-        # 確保 date 是 datetime 格式方便排序與處理
-        eps_df['date'] = pd.to_datetime(eps_df['date'])
-        eps_df = eps_df.sort_values('date')
-        return eps_df
+        df = pd.DataFrame()
+        try:
+            df = self.api.taiwan_stock_financial_statement(
+                stock_id=stock_id,
+                start_date=start_date
+            )
+        except:
+            pass
+
+        if not df.empty and 'type' in df.columns:
+            eps_df = df[df['type'] == 'EPS'].copy()
+            eps_df['date'] = pd.to_datetime(eps_df['date'])
+            eps_df = eps_df.sort_values('date')
+            if not eps_df.empty:
+                return eps_df
+
+        # 備援 yfinance
+        try:
+            tk = yf.Ticker(self._get_yf_ticker(stock_id))
+            income = tk.income_stmt # 年度 EPS，yfinance 對台股季度支援較弱
+            if not income.empty:
+                label = 'Basic EPS' if 'Basic EPS' in income.index else 'Diluted EPS'
+                if label in income.index:
+                    vals = income.loc[label]
+                    # 模擬 FinMind 格式返回
+                    fallback_df = pd.DataFrame({
+                        'date': vals.index,
+                        'value': vals.values,
+                        'type': 'EPS'
+                    })
+                    return fallback_df
+        except:
+            pass
+            
+        return pd.DataFrame()
 
     def get_yield_and_multipliers(self, stock_id: str, days: int = 1000):
         """獲取近三年殖利率與本益比資料 (從台灣證券交易所股價倍數資料)"""
@@ -60,15 +122,41 @@ class StockDataLoader:
         return df
 
     def get_dividends_last_3_years(self, stock_id: str):
-        """獲取近三年股利發放資料 (現金與股票)"""
+        """獲取近三年股利發放資料 (優先 FinMind, 備援 yfinance)"""
         current_year = datetime.date.today().year
-        start_date = f"{current_year - 4}-01-01" # 往前多抓一年確保完整性
+        start_date = f"{current_year - 4}-01-01"
         
-        df = self.api.taiwan_stock_dividend(
-            stock_id=stock_id,
-            start_date=start_date
-        )
-        return df
+        df = pd.DataFrame()
+        try:
+            df = self.api.taiwan_stock_dividend(
+                stock_id=stock_id,
+                start_date=start_date
+            )
+        except:
+            pass
+
+        if not df.empty:
+            return df
+
+        # 備援 yfinance
+        try:
+            tk = yf.Ticker(self._get_yf_ticker(stock_id))
+            divs = tk.dividends
+            if not divs.empty:
+                # 模擬 FinMind 格式 (這裡 yfinance 無法區分現金/股票，預設全放現金)
+                fallback_df = pd.DataFrame({
+                    'date': divs.index,
+                    'CashEarningsDistribution': divs.values,
+                    'StockEarningsDistribution': 0.0
+                })
+                # 過濾近三年
+                cutoff = pd.to_datetime(start_date).tz_localize(divs.index.tz)
+                fallback_df = fallback_df[fallback_df['date'] >= cutoff]
+                return fallback_df
+        except:
+            pass
+            
+        return pd.DataFrame()
     def get_etf_constituents(self, etf_id: str):
         """抓取 ETF 成份股列表 (使用 MoneyDJ SSR 頁面)"""
         import requests
