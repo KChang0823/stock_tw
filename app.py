@@ -107,19 +107,30 @@ if st.session_state.etf_list:
         stock_list = sorted(list(all_constituents))
         
         results = []
+        errors = 0
         # 使用進度條讓用戶知道進度
         progress_bar = st.progress(0)
         status_text = st.empty()
         
+        import time
         for i, sid in enumerate(stock_list):
             status_text.text(f"正在分析 ({i+1}/{len(stock_list)}): {sid}")
             data = cached_valuation(sid)
             if data and "error" not in data:
                 results.append(data)
+            else:
+                errors += 1
             progress_bar.progress((i + 1) / len(stock_list))
+            
+            # 若不是最後一檔且不是 cached，則稍微延遲避免 API 被擋
+            # 這裡簡單處理：每檔都睡 0.2s，50 檔約 10s，可大幅增加穩定性
+            time.sleep(0.25)
         
         status_text.empty()
         progress_bar.empty()
+        
+        if errors > 0:
+            st.warning(f"註：有 {errors} 檔股票因數據不全或連線限制被跳過。")
 
     if results:
         st.subheader(f"📊 成份股綜合評比 (共 {len(results)} 檔)")
