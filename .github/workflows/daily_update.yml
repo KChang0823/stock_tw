@@ -1,0 +1,27 @@
+name: Daily Stock Valuation Update
+
+on:
+  schedule:
+    - cron: '0 0 * * 1-5'    # UTC 00:00 = 台灣 08:00，週一至週五
+  workflow_dispatch:           # 手動觸發按鈕
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily update
+        run: python scripts/daily_update.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}

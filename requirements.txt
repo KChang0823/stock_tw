@@ -7,3 +7,5 @@ openpyxl
 tqdm
 requests
 beautifulsoup4
+supabase
+python-dotenv
