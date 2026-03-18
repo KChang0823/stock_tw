@@ -2,15 +2,18 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@supabase/supabase-js'
-import { Search, ArrowUpDown } from 'lucide-react'
+import { Search, ArrowUpDown, Settings, X } from 'lucide-react'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-)
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  )
+}
 
 type Stock = {
   stock_id: string
+  company_name: string | null
   current_price: number | null
   buy_low: number | null
   buy_high: number | null
@@ -28,6 +31,13 @@ type Etf = {
 
 type SortKey = 'stock_id' | 'current_price' | 'signal'
 type SortDir = 'asc' | 'desc'
+
+const FONT_SIZES = [
+  { label: '小', value: 13 },
+  { label: '中', value: 15 },
+  { label: '大', value: 18 },
+  { label: '特大', value: 22 },
+]
 
 function getSignalClass(signal: string | null) {
   if (!signal) return 'signal-neutral'
@@ -53,16 +63,29 @@ export default function Home() {
   const [sortKey, setSortKey] = useState<SortKey>('signal')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [loading, setLoading] = useState(true)
+  const [fontSize, setFontSize] = useState(15)
+  const [showSettings, setShowSettings] = useState(false)
+
+  // 從 localStorage 讀取字級偏好
+  useEffect(() => {
+    const saved = localStorage.getItem('etf-font-size')
+    if (saved) setFontSize(Number(saved))
+  }, [])
+
+  const updateFontSize = (size: number) => {
+    setFontSize(size)
+    localStorage.setItem('etf-font-size', String(size))
+  }
 
   useEffect(() => {
     async function load() {
+      const sb = getSupabase()
       const [etfRes, stockRes] = await Promise.all([
-        supabase.from('tracked_etfs').select('*'),
-        supabase.from('stock_valuations').select('*'),
+        sb.from('tracked_etfs').select('*'),
+        sb.from('stock_valuations').select('*'),
       ])
       setEtfs(etfRes.data || [])
       setStocks(stockRes.data || [])
-      // 預設全選
       setSelectedEtfs(new Set((etfRes.data || []).map((e: Etf) => e.etf_id)))
       setLoading(false)
     }
@@ -91,15 +114,14 @@ export default function Home() {
 
   const filtered = useMemo(() => {
     let list = stocks.filter(s => {
-      // ETF 篩選
       if (selectedEtfs.size > 0) {
         const sources = s.etf_sources || ''
         const match = Array.from(selectedEtfs).some(id => sources.includes(id))
         if (!match) return false
       }
-      // 搜尋篩選
       if (search) {
-        return s.stock_id.includes(search)
+        const q = search.toLowerCase()
+        return s.stock_id.includes(q) || (s.company_name || '').toLowerCase().includes(q)
       }
       return true
     })
@@ -131,15 +153,89 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen" style={{ padding: '32px 40px' }}>
+    <main className="min-h-screen" style={{ padding: '32px 40px', fontSize }}>
       {/* Header */}
-      <header style={{ marginBottom: 32 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, color: '#0F172A', marginBottom: 4 }}>
-          ETF 成份股篩選器
-        </h1>
-        <p style={{ fontSize: 14, color: '#64748B' }}>
-          高股息 ETF 成份股估值追蹤 · 共 {filtered.length} 檔
-        </p>
+      <header style={{ marginBottom: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1 style={{ fontSize: fontSize * 1.6, fontWeight: 700, color: '#0F172A', marginBottom: 4 }}>
+            ETF 成份股篩選器
+          </h1>
+          <p style={{ fontSize: fontSize * 0.9, color: '#64748B' }}>
+            高股息 ETF 成份股估值追蹤 · 共 {filtered.length} 檔
+          </p>
+        </div>
+
+        {/* Settings button */}
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            style={{
+              padding: 8,
+              borderRadius: 8,
+              border: '1px solid #E2E8F0',
+              background: showSettings ? '#F1F5F9' : 'white',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 13,
+              color: '#475569',
+              transition: 'all 0.2s',
+            }}
+            aria-label="設定字體大小"
+          >
+            <Settings size={16} />
+            字級
+          </button>
+
+          {showSettings && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              right: 0,
+              marginTop: 8,
+              background: 'white',
+              border: '1px solid #E2E8F0',
+              borderRadius: 12,
+              padding: 16,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+              zIndex: 50,
+              minWidth: 200,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <span style={{ fontWeight: 600, fontSize: 14, color: '#0F172A' }}>字體大小</span>
+                <button onClick={() => setShowSettings(false)} style={{ cursor: 'pointer', color: '#94A3B8', background: 'none', border: 'none' }}>
+                  <X size={16} />
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {FONT_SIZES.map(s => (
+                  <button
+                    key={s.value}
+                    onClick={() => updateFontSize(s.value)}
+                    style={{
+                      flex: 1,
+                      padding: '8px 0',
+                      borderRadius: 8,
+                      border: fontSize === s.value ? '2px solid #3B82F6' : '1px solid #E2E8F0',
+                      background: fontSize === s.value ? '#EFF6FF' : 'white',
+                      color: fontSize === s.value ? '#3B82F6' : '#475569',
+                      fontWeight: fontSize === s.value ? 600 : 400,
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ marginTop: 8, fontSize: 12, color: '#94A3B8', textAlign: 'center' }}>
+                目前：{fontSize}px
+              </div>
+            </div>
+          )}
+        </div>
       </header>
 
       {/* Search + ETF Chips */}
@@ -151,7 +247,7 @@ export default function Home() {
           />
           <input
             type="text"
-            placeholder="搜尋股票代號..."
+            placeholder="搜尋股票代號或公司名..."
             className="search-input"
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -181,12 +277,18 @@ export default function Home() {
         boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
       }}>
         <div style={{ overflowX: 'auto' }}>
-          <table className="data-table">
+          <table className="data-table" style={{ fontSize }}>
             <thead>
               <tr>
                 <th onClick={() => handleSort('stock_id')} style={{ cursor: 'pointer' }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                     代號 <ArrowUpDown size={12} />
+                  </span>
+                </th>
+                <th>公司名</th>
+                <th onClick={() => handleSort('signal')} style={{ cursor: 'pointer' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    訊號 <ArrowUpDown size={12} />
                   </span>
                 </th>
                 <th style={{ textAlign: 'right' }} onClick={() => handleSort('current_price')} className="cursor-pointer">
@@ -196,11 +298,6 @@ export default function Home() {
                 </th>
                 <th style={{ textAlign: 'center' }}>買入區間</th>
                 <th style={{ textAlign: 'center' }}>賣出區間</th>
-                <th onClick={() => handleSort('signal')} style={{ cursor: 'pointer' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    訊號 <ArrowUpDown size={12} />
-                  </span>
-                </th>
                 <th>所屬 ETF</th>
               </tr>
             </thead>
@@ -212,14 +309,8 @@ export default function Home() {
                       {stock.stock_id}
                     </span>
                   </td>
-                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: '#334155' }}>
-                    {stock.current_price?.toLocaleString() ?? '—'}
-                  </td>
-                  <td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: 13, color: '#059669' }}>
-                    {stock.buy_low?.toFixed(1)} – {stock.buy_high?.toFixed(1)}
-                  </td>
-                  <td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: 13, color: '#DC2626' }}>
-                    {stock.sell_low?.toFixed(1)} – {stock.sell_high?.toFixed(1)}
+                  <td style={{ color: '#334155' }}>
+                    {stock.company_name || '—'}
                   </td>
                   <td>
                     <span className={getSignalClass(stock.signal)}>
@@ -229,11 +320,20 @@ export default function Home() {
                       {stock.signal || '—'}
                     </span>
                   </td>
+                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: '#334155' }}>
+                    {stock.current_price?.toLocaleString() ?? '—'}
+                  </td>
+                  <td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', color: '#059669' }}>
+                    {stock.buy_low?.toFixed(1)} – {stock.buy_high?.toFixed(1)}
+                  </td>
+                  <td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', color: '#DC2626' }}>
+                    {stock.sell_low?.toFixed(1)} – {stock.sell_high?.toFixed(1)}
+                  </td>
                   <td>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                       {(stock.etf_sources || '').split(',').map(id => id.trim()).filter(Boolean).map(id => (
                         <span key={id} style={{
-                          fontSize: 11,
+                          fontSize: fontSize * 0.75,
                           padding: '2px 8px',
                           borderRadius: 4,
                           background: '#F1F5F9',
@@ -253,7 +353,7 @@ export default function Home() {
       </div>
 
       {/* Footer */}
-      <footer style={{ marginTop: 16, fontSize: 12, color: '#94A3B8' }}>
+      <footer style={{ marginTop: 16, fontSize: fontSize * 0.8, color: '#94A3B8' }}>
         最後更新：{stocks[0]?.updated_at ? new Date(stocks[0].updated_at).toLocaleString('zh-TW') : '—'}
       </footer>
     </main>

@@ -67,7 +67,18 @@ def main():
         for sid in stocks:
             stock_to_etfs.setdefault(sid, []).append(etf_id)
     
-    # 5. 對每檔股票計算估價
+    # 5. 批次抓取所有股票的公司名
+    print(f"\n--- 抓取公司名稱 ---")
+    stock_name_map = {}
+    try:
+        info_df = loader.api.taiwan_stock_info()
+        for _, row in info_df.iterrows():
+            stock_name_map[str(row.get('stock_id', ''))] = str(row.get('stock_name', ''))
+        print(f"  取得 {len(stock_name_map)} 筆公司名稱")
+    except Exception as e:
+        print(f"  ⚠ 無法取得公司名稱: {e}")
+    
+    # 6. 對每檔股票計算估價
     stock_list = sorted(list(all_stocks))
     total = len(stock_list)
     success = 0
@@ -87,6 +98,7 @@ def main():
                 etf_sources = ",".join(sorted(stock_to_etfs.get(sid, [])))
                 row = {
                     "stock_id": sid,
+                    "company_name": stock_name_map.get(sid, ''),
                     "current_price": data["current_price"],
                     "eps_low": data["eps_predict"]["low"],
                     "eps_high": data["eps_predict"]["high"],

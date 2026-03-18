@@ -8,6 +8,17 @@ class StockDataLoader:
         if api_token:
             self.api.login(api_token)
         
+    def get_stock_name(self, stock_id: str) -> str:
+        """獲取股票公司名稱"""
+        try:
+            df = self.api.taiwan_stock_info()
+            row = df[df['stock_id'] == stock_id]
+            if not row.empty:
+                return row.iloc[0].get('stock_name', '')
+        except Exception as e:
+            print(f"  ⚠ 無法取得 {stock_id} 公司名: {e}")
+        return ''
+
     def get_stock_price(self, stock_id: str, days: int = 30):
         """獲取最近股價"""
         end_date = datetime.date.today().strftime("%Y-%m-%d")
