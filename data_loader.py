@@ -43,15 +43,19 @@ class StockDataLoader:
         return ''
 
     def get_stock_price(self, stock_id: str, days: int = 30):
-        """獲取最近股價"""
+        """獲取最近股價 (優先 FinMind, 備援 yfinance)"""
         end_date = datetime.date.today().strftime("%Y-%m-%d")
         start_date = (datetime.date.today() - datetime.timedelta(days=days)).strftime("%Y-%m-%d")
         
-        df = self.api.taiwan_stock_daily(
-            stock_id=stock_id,
-            start_date=start_date,
-            end_date=end_date
-        )
+        df = pd.DataFrame()
+        try:
+            df = self.api.taiwan_stock_daily(
+                stock_id=stock_id,
+                start_date=start_date,
+                end_date=end_date
+            )
+        except:
+            pass
         
         # 備援 yfinance
         if df.empty:
