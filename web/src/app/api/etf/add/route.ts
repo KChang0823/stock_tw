@@ -44,13 +44,7 @@ export async function POST(req: NextRequest) {
         const decoder = new TextDecoder('big5')
         const html = decoder.decode(buffer)
         
-        // 解析 ETF 名稱 (從 <title> 提取，MoneyDJ 格式為 "元大臺灣ESG永續-00850.TW-...")
-        let etfName = etf_id
-        const titleMatch = html.match(/<title>([^<-]+)/i)
-        if (titleMatch && titleMatch[1]) {
-          etfName = titleMatch[1].trim()
-        }
-
+        // 1. 抓成份股代號 (數字部分不會有編碼問題)
         const matches = html.matchAll(/etfid=(\d{4,5})\.TW/g)
         const stockIds = [...new Set(
           Array.from(matches, m => m[1]).filter(id => id !== etf_id)
@@ -60,6 +54,18 @@ export async function POST(req: NextRequest) {
           send('', 0, true, `找不到 ${etf_id} 的成份股，請確認代號是否正確`)
           controller.close()
           return
+        }
+
+        // 2. 獲取 ETF 中文名稱 (從 FinMind API 獲取，避免 Big5 亂碼)
+        let etfName = etf_id
+        try {
+          const infoResp = await fetch(`https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo&data_id=${etf_id}`)
+          const infoJson = await infoResp.json()
+          if (infoJson.data && infoJson.data.length > 0) {
+            etfName = infoJson.data[0].stock_name
+          }
+        } catch (e) {
+          console.warn('Failed to fetch ETF name from FinMind:', e)
         }
 
         send(`找到 ${stockIds.length} 檔成份股 [${etfName}]，正在寫入資料庫...`, 30)

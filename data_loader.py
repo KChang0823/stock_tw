@@ -10,11 +10,10 @@ class StockDataLoader:
         if api_token:
             self.api.login(api_token)
         
-    def _get_yf_ticker(self, stock_id: str) -> str:
+    def _get_yf_ticker(self, stock_id: str, is_otc: bool = False) -> str:
         """輔助方法：將代號轉為 yfinance 格式 (.TW 或 .TWO)"""
-        # 簡單邏輯：4位數通常是上市 .TW，但為了精準，如果已知名稱抓不到可嘗試切換
-        # 這裡預設先用 .TW，若 yfinance info 為空再試 .TWO
-        return f"{stock_id}.TW"
+        suffix = ".TWO" if is_otc else ".TW"
+        return f"{stock_id}{suffix}"
 
     def get_stock_name(self, stock_id: str) -> str:
         """獲取股票公司名稱 (優先 FinMind, 備援 yfinance)"""
@@ -29,16 +28,13 @@ class StockDataLoader:
             pass
 
         # 2. Try yfinance Fallback
-        try:
-            tk = yf.Ticker(self._get_yf_ticker(stock_id))
-            name = tk.info.get('longName') or tk.info.get('shortName')
-            if not name:
-                # 嘗試 .TWO (上櫃)
-                tk = yf.Ticker(f"{stock_id}.TWO")
+        for suffix in [".TW", ".TWO"]:
+            try:
+                tk = yf.Ticker(f"{stock_id}{suffix}")
                 name = tk.info.get('longName') or tk.info.get('shortName')
-            if name: return name
-        except:
-            pass
+                if name: return name
+            except:
+                continue
             
         return ''
 
@@ -59,17 +55,19 @@ class StockDataLoader:
         
         # 備援 yfinance
         if df.empty:
-            try:
-                tk = yf.Ticker(self._get_yf_ticker(stock_id))
-                hist = tk.history(period="1mo")
-                if not hist.empty:
-                    # 轉換為 FinMind 格式
-                    df = hist.reset_index()
-                    df.columns = [col.lower() for col in df.columns]
-                    # yfinance 的 columns 名稱不同，映射一下
-                    df = df.rename(columns={'date': 'date', 'close': 'close'})
-            except:
-                pass
+            for suffix in [".TW", ".TWO"]:
+                try:
+                    tk = yf.Ticker(f"{stock_id}{suffix}")
+                    hist = tk.history(period="1mo")
+                    if not hist.empty:
+                        # 轉換為 FinMind 格式
+                        df = hist.reset_index()
+                        df.columns = [col.lower() for col in df.columns]
+                        # yfinance 的 columns 名稱不同，映射一下
+                        df = df.rename(columns={'date': 'date', 'close': 'close'})
+                        break
+                except:
+                    continue
         return df
 
     def get_eps_last_3_years(self, stock_id: str):
@@ -94,22 +92,23 @@ class StockDataLoader:
                 return eps_df
 
         # 備援 yfinance
-        try:
-            tk = yf.Ticker(self._get_yf_ticker(stock_id))
-            income = tk.income_stmt # 年度 EPS，yfinance 對台股季度支援較弱
-            if not income.empty:
-                label = 'Basic EPS' if 'Basic EPS' in income.index else 'Diluted EPS'
-                if label in income.index:
-                    vals = income.loc[label]
-                    # 模擬 FinMind 格式返回
-                    fallback_df = pd.DataFrame({
-                        'date': vals.index,
-                        'value': vals.values,
-                        'type': 'EPS'
-                    })
-                    return fallback_df
-        except:
-            pass
+        for suffix in [".TW", ".TWO"]:
+            try:
+                tk = yf.Ticker(f"{stock_id}{suffix}")
+                income = tk.income_stmt # 年度 EPS
+                if not income.empty:
+                    label = 'Basic EPS' if 'Basic EPS' in income.index else 'Diluted EPS'
+                    if label in income.index:
+                        vals = income.loc[label]
+                        # 模擬 FinMind 格式返回
+                        fallback_df = pd.DataFrame({
+                            'date': vals.index,
+                            'value': vals.values,
+                            'type': 'EPS'
+                        })
+                        return fallback_df
+            except:
+                continue
             
         return pd.DataFrame()
 
@@ -143,22 +142,23 @@ class StockDataLoader:
             return df
 
         # 備援 yfinance
-        try:
-            tk = yf.Ticker(self._get_yf_ticker(stock_id))
-            divs = tk.dividends
-            if not divs.empty:
-                # 模擬 FinMind 格式 (這裡 yfinance 無法區分現金/股票，預設全放現金)
-                fallback_df = pd.DataFrame({
-                    'date': divs.index,
-                    'CashEarningsDistribution': divs.values,
-                    'StockEarningsDistribution': 0.0
-                })
-                # 過濾近三年
-                cutoff = pd.to_datetime(start_date).tz_localize(divs.index.tz)
-                fallback_df = fallback_df[fallback_df['date'] >= cutoff]
-                return fallback_df
-        except:
-            pass
+        for suffix in [".TW", ".TWO"]:
+            try:
+                tk = yf.Ticker(f"{stock_id}{suffix}")
+                divs = tk.dividends
+                if not divs.empty:
+                    # 模擬 FinMind 格式 (這裡 yfinance 無法區分現金/股票，預設全放現金)
+                    fallback_df = pd.DataFrame({
+                        'date': divs.index,
+                        'CashEarningsDistribution': divs.values,
+                        'StockEarningsDistribution': 0.0
+                    })
+                    # 過濾近三年
+                    cutoff = pd.to_datetime(start_date).tz_localize(divs.index.tz)
+                    fallback_df = fallback_df[fallback_df['date'] >= cutoff]
+                    return fallback_df
+            except:
+                continue
             
         return pd.DataFrame()
     def get_etf_constituents(self, etf_id: str):
