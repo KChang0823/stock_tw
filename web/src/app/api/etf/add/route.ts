@@ -13,9 +13,9 @@ function sseMsg(step: string, progress: number, done = false, error = '') {
 export async function POST(req: NextRequest) {
   const { etf_id } = await req.json()
 
-  if (!etf_id || !/^\d{4,5}$/.test(etf_id)) {
+  if (!etf_id || !/^[A-Z0-9]{4,6}$/i.test(etf_id)) {
     return new Response(
-      JSON.stringify({ error: '請輸入有效的 ETF 代號（4~5 位數字）' }),
+      JSON.stringify({ error: '請輸入有效的代號（如 0050 或 00990A）' }),
       { status: 400, headers: { 'Content-Type': 'application/json' } }
     )
   }
