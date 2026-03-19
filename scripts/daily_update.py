@@ -147,8 +147,10 @@ def main():
                 print(f"✅ ${data['current_price']} | {data['signal'] or '-'}")
                 success += 1
         except Exception as e:
-            print(f"❌ {e}")
+            print(f"❌ 嚴重異常: {e}")
             failed += 1
+            # 繼續下一檔，不要讓單一股票崩潰整個腳本
+            continue
         
         # 避免 FinMind API 速率限制
         time.sleep(0.5)

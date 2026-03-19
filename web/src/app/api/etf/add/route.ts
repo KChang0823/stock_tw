@@ -44,8 +44,8 @@ export async function POST(req: NextRequest) {
         const decoder = new TextDecoder('big5')
         const html = decoder.decode(buffer)
         
-        // 1. 抓成份股代號 (數字部分不會有編碼問題)
-        const matches = html.matchAll(/etfid=(\d{4,5})\.TW/g)
+        // 1. 抓成份股代號 (使用無視大小寫的正規表達式，確保抓取所有符合格式的代號)
+        const matches = html.matchAll(/etfid=(\d{4,5})\.TW/gi)
         const stockIds = [...new Set(
           Array.from(matches, m => m[1]).filter(id => id !== etf_id)
         )].sort()

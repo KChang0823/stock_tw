@@ -182,15 +182,10 @@ class StockDataLoader:
             
             soup = BeautifulSoup(resp.text, 'html.parser')
             
-            # 找所有 etfid=XXXX.TW 格式的連結 (成份股)
-            links = soup.find_all('a', href=re.compile(r'etfid=\d{4,5}\.TW'))
-            stock_ids = []
-            for link in links:
-                match = re.search(r'etfid=(\d{4,5})\.TW', link['href'])
-                if match:
-                    sid = match.group(1)
-                    if sid != etf_id:
-                        stock_ids.append(sid)
+            # 找所有 etfid=XXXX.TW 格式的連結 (採用更強健的原始 HTML 正規表達式，與前端 API 同步)
+            html_content = resp.text
+            matches = re.findall(r'etfid=(\d{4,5})\.TW', html_content, re.IGNORECASE)
+            stock_ids = [m for m in matches if m != etf_id]
             
             result = sorted(list(set(stock_ids)))
             if result:
