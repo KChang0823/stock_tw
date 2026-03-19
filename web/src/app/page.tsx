@@ -68,7 +68,8 @@ export default function Home() {
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [loading, setLoading] = useState(true)
   const [fontSize, setFontSize] = useState(20)
-  const [buyMultiplier, setBuyMultiplier] = useState(16)
+  const [buyYield, setBuyYield] = useState(6.25) // 100/16
+  const [sellYield, setSellYield] = useState(3.125) // 100/32
   const [showSettings, setShowSettings] = useState(false)
   const [newEtfId, setNewEtfId] = useState('')
   const [addingEtf, setAddingEtf] = useState(false)
@@ -79,22 +80,30 @@ export default function Home() {
     const savedSize = localStorage.getItem('etf-font-size')
     if (savedSize) setFontSize(Number(savedSize))
     
-    // 優先從 API 讀取全域設定，失敗則用 localStorage 或預設
+    // 優先從 API 讀取全域設定
     const loadSettings = async () => {
       try {
         const res = await fetch('/api/settings')
         const data = await res.json()
         if (data.buy_multiplier) {
-          setBuyMultiplier(data.buy_multiplier)
-          localStorage.setItem('etf-buy-multiplier', String(data.buy_multiplier))
-          return
+          const by = 100 / data.buy_multiplier
+          setBuyYield(Number(by.toFixed(3)))
+          localStorage.setItem('etf-buy-yield', String(by))
         }
+        if (data.sell_multiplier) {
+          const sy = 100 / data.sell_multiplier
+          setSellYield(Number(sy.toFixed(3)))
+          localStorage.setItem('etf-sell-yield', String(sy))
+        }
+        if (data.buy_multiplier) return // 已從 API 載入
       } catch (err) {
         console.error('Failed to load settings from API:', err)
       }
       
-      const savedMult = localStorage.getItem('etf-buy-multiplier')
-      if (savedMult) setBuyMultiplier(Number(savedMult))
+      const savedBY = localStorage.getItem('etf-buy-yield')
+      if (savedBY) setBuyYield(Number(savedBY))
+      const savedSY = localStorage.getItem('etf-sell-yield')
+      if (savedSY) setSellYield(Number(savedSY))
     }
     
     loadSettings()
@@ -105,25 +114,28 @@ export default function Home() {
     localStorage.setItem('etf-font-size', String(size))
   }
 
-  const updateBuyMultiplier = async (val: number) => {
-    setBuyMultiplier(val)
-    localStorage.setItem('etf-buy-multiplier', String(val))
-    
-    // 非同步同步到後端 (不阻塞 UI)
+  const syncSettings = async (key: string, val: number) => {
     try {
       await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'buy_multiplier', value: val }),
-      })
-      await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'sell_multiplier', value: val * 2 }),
+        body: JSON.stringify({ key, value: val }),
       })
     } catch (err) {
       console.error('Failed to sync settings to API:', err)
     }
+  }
+
+  const updateBuyYield = (val: number) => {
+    setBuyYield(val)
+    localStorage.setItem('etf-buy-yield', String(val))
+    syncSettings('buy_multiplier', 100 / val)
+  }
+
+  const updateSellYield = (val: number) => {
+    setSellYield(val)
+    localStorage.setItem('etf-sell-yield', String(val))
+    syncSettings('sell_multiplier', 100 / val)
   }
 
   useEffect(() => {
@@ -235,19 +247,17 @@ export default function Home() {
   const filtered = useMemo(() => {
     let list = stocks.map(s => {
       // 核心估價重算邏輯 (與 Python ValuationEngine 同步)
-      const m = buyMultiplier
-      const sm = m * 2 // 32 / 16 = 2
-      
-      const calcPrice = (cash: number, stock: number, mult: number) => {
+      const calcPrice = (cash: number, stock: number, yieldPct: number) => {
+        const mult = 100 / yieldPct
         const adj = 1 + (stock / 10)
         if (adj === 0) return 0
         return (cash * mult) / adj
       }
 
-      const bl = calcPrice(s.cash_dividend_low || 0, s.stock_dividend_low || 0, m)
-      const bh = calcPrice(s.cash_dividend_high || 0, s.stock_dividend_high || 0, m)
-      const sl = calcPrice(s.cash_dividend_low || 0, s.stock_dividend_low || 0, sm)
-      const sh = calcPrice(s.cash_dividend_high || 0, s.stock_dividend_high || 0, sm)
+      const bl = calcPrice(s.cash_dividend_low || 0, s.stock_dividend_low || 0, buyYield)
+      const bh = calcPrice(s.cash_dividend_high || 0, s.stock_dividend_high || 0, buyYield)
+      const sl = calcPrice(s.cash_dividend_low || 0, s.stock_dividend_low || 0, sellYield)
+      const sh = calcPrice(s.cash_dividend_high || 0, s.stock_dividend_high || 0, sellYield)
 
       // 重新判斷訊號
       let sig = ''
@@ -293,7 +303,7 @@ export default function Home() {
     })
 
     return list
-  }, [stocks, selectedEtfs, search, sortKey, sortDir, buyMultiplier])
+  }, [stocks, selectedEtfs, search, sortKey, sortDir, buyYield, sellYield])
 
   if (loading) {
     return (
@@ -307,114 +317,141 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen" style={{ padding: '32px 40px', fontSize }}>
-      {/* Header */}
-      <header style={{ marginBottom: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <h1 style={{ fontSize: fontSize * 1.6, fontWeight: 700, color: '#0F172A', marginBottom: 4 }}>
-            ETF 成份股篩選器
-          </h1>
-          <p style={{ fontSize: fontSize * 0.9, color: '#64748B' }}>
-            高股息 ETF 成份股估值追蹤 · 共 {filtered.length} 檔
-          </p>
-        </div>
-
-        {/* Settings button */}
-        <div style={{ position: 'relative', display: 'flex', gap: 12 }}>
-          {/* Multiplier Slider Panel */}
-          <div style={{ 
-            background: 'white', 
-            border: '1px solid #E2E8F0', 
-            borderRadius: 8, 
-            padding: '4px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-          }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
-              目標位階 (買): <span style={{ color: '#3B82F6', width: 24, display: 'inline-block' }}>{buyMultiplier}x</span>
-            </span>
-            <input 
-              type="range" 
-              min="10" 
-              max="40" 
-              step="1"
-              value={buyMultiplier}
-              onChange={(e) => updateBuyMultiplier(Number(e.target.value))}
-              style={{ width: 120, cursor: 'pointer' }}
-            />
+    <main className="min-h-screen bg-[#F8FAFC]">
+      <div style={{ 
+        maxWidth: 1440, 
+        margin: '0 auto', 
+        padding: '32px 40px', 
+        fontSize 
+      }}>
+        {/* Header */}
+        <header style={{ marginBottom: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <h1 style={{ fontSize: fontSize * 1.6, fontWeight: 700, color: '#0F172A', marginBottom: 4 }}>
+              ETF 成份股篩選器
+            </h1>
+            <p style={{ fontSize: fontSize * 0.9, color: '#64748B' }}>
+              高股息 ETF 成份股估值追蹤 · 共 {filtered.length} 檔
+            </p>
           </div>
 
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            style={{
-              padding: 8,
-              borderRadius: 8,
-              border: '1px solid #E2E8F0',
-              background: showSettings ? '#F1F5F9' : 'white',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              fontSize: 13,
-              color: '#475569',
-              transition: 'all 0.2s',
-            }}
-            aria-label="設定字體大小"
-          >
-            <Settings size={16} />
-            字級
-          </button>
+          {/* Settings button */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 8,
+                border: '1px solid #E2E8F0',
+                background: showSettings ? '#F1F5F9' : 'white',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 14,
+                fontWeight: 600,
+                color: '#475569',
+                transition: 'all 0.2s',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+              }}
+            >
+              <Settings size={18} />
+              設定
+            </button>
 
-          {showSettings && (
-            <div style={{
-              position: 'absolute',
-              top: '100%',
-              right: 0,
-              marginTop: 8,
-              background: 'white',
-              border: '1px solid #E2E8F0',
-              borderRadius: 12,
-              padding: 16,
-              boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-              zIndex: 50,
-              minWidth: 200,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <span style={{ fontWeight: 600, fontSize: 14, color: '#0F172A' }}>字體大小</span>
-                <button onClick={() => setShowSettings(false)} style={{ cursor: 'pointer', color: '#94A3B8', background: 'none', border: 'none' }}>
-                  <X size={16} />
-                </button>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {FONT_SIZES.map(s => (
-                  <button
-                    key={s.value}
-                    onClick={() => updateFontSize(s.value)}
-                    style={{
-                      flex: 1,
-                      padding: '8px 0',
-                      borderRadius: 8,
-                      border: fontSize === s.value ? '2px solid #3B82F6' : '1px solid #E2E8F0',
-                      background: fontSize === s.value ? '#EFF6FF' : 'white',
-                      color: fontSize === s.value ? '#3B82F6' : '#475569',
-                      fontWeight: fontSize === s.value ? 600 : 400,
-                      cursor: 'pointer',
-                      fontSize: 13,
-                      transition: 'all 0.15s',
-                    }}
-                  >
-                    {s.label}
+            {showSettings && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                right: 0,
+                marginTop: 12,
+                background: 'white',
+                border: '1px solid #E2E8F0',
+                borderRadius: 16,
+                padding: 24,
+                boxShadow: '0 10px 40px rgba(0,0,0,0.12)',
+                zIndex: 50,
+                minWidth: 320,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                  <span style={{ fontWeight: 700, fontSize: 16, color: '#0F172A' }}>系統偏好設定</span>
+                  <button onClick={() => setShowSettings(false)} style={{ cursor: 'pointer', color: '#94A3B8', background: 'none', border: 'none' }}>
+                    <X size={20} />
                   </button>
-                ))}
+                </div>
+
+                {/* Buy Yield Slider */}
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: '#475569' }}>買入目標殖利率</span>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: '#3B82F6' }}>{buyYield.toFixed(2)}%</div>
+                      <div style={{ fontSize: 12, color: '#94A3B8' }}>相當於 {(100 / buyYield).toFixed(1)} 倍</div>
+                    </div>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="3" 
+                    max="12" 
+                    step="0.25"
+                    value={buyYield}
+                    onChange={(e) => updateBuyYield(Number(e.target.value))}
+                    style={{ width: '100%', cursor: 'pointer', accentColor: '#3B82F6' }}
+                  />
+                </div>
+
+                {/* Sell Yield Slider */}
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: '#475569' }}>賣出目標殖利率</span>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: '#EF4444' }}>{sellYield.toFixed(2)}%</div>
+                      <div style={{ fontSize: 12, color: '#94A3B8' }}>相當於 {(100 / sellYield).toFixed(1)} 倍</div>
+                    </div>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="1" 
+                    max="8" 
+                    step="0.125"
+                    value={sellYield}
+                    onChange={(e) => updateSellYield(Number(e.target.value))}
+                    style={{ width: '100%', cursor: 'pointer', accentColor: '#EF4444' }}
+                  />
+                </div>
+
+                <div style={{ height: 1, background: '#F1F5F9', margin: '0 -24px 20px' }} />
+
+                {/* Font Size Selector */}
+                <div>
+                  <span style={{ fontWeight: 600, fontSize: 14, color: '#475569', display: 'block', marginBottom: 12 }}>介面字體大小</span>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {FONT_SIZES.map(s => (
+                      <button
+                        key={s.value}
+                        onClick={() => updateFontSize(s.value)}
+                        style={{
+                          flex: 1,
+                          padding: '10px 0',
+                          borderRadius: 8,
+                          border: fontSize === s.value ? '2px solid #3B82F6' : '1px solid #E2E8F0',
+                          background: fontSize === s.value ? '#EFF6FF' : 'white',
+                          color: fontSize === s.value ? '#3B82F6' : '#475569',
+                          fontWeight: fontSize === s.value ? 700 : 500,
+                          cursor: 'pointer',
+                          fontSize: 13,
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <div style={{ marginTop: 8, fontSize: 12, color: '#94A3B8', textAlign: 'center' }}>
-                目前：{fontSize}px
-              </div>
-            </div>
-          )}
-        </div>
-      </header>
+            )}
+          </div>
+        </header>
 
       {/* Search + ETF Chips */}
       <div style={{ marginBottom: 24 }}>
@@ -609,6 +646,7 @@ export default function Home() {
       <footer style={{ marginTop: 16, fontSize: fontSize * 0.8, color: '#94A3B8' }}>
         最後更新：{stocks[0]?.updated_at ? new Date(stocks[0].updated_at).toLocaleString('zh-TW') : '—'}
       </footer>
+      </div>
     </main>
   )
 }
