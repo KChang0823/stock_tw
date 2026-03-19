@@ -2,7 +2,7 @@ name: Daily Stock Valuation Update
 
 on:
   schedule:
-    - cron: '0 23 * * 0-4'    # UTC 23:00 = 台灣 07:00 (週日至週四 UTC = 週一至週五台灣)
+    - cron: '30 5 * * 1-5'      # UTC 05:30 = 台灣 13:30 (週一至週五)
   workflow_dispatch:           # 手動觸發按鈕
 
 jobs:
