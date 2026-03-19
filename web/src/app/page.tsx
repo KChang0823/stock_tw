@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@supabase/supabase-js'
-import { Search, ArrowUpDown, Settings, X, Plus, Loader2 } from 'lucide-react'
+import { Search, ArrowUpDown, Settings, X, Plus, Loader2, RotateCcw } from 'lucide-react'
 
 function getSupabase() {
   return createClient(
@@ -136,6 +136,11 @@ export default function Home() {
     setSellYield(val)
     localStorage.setItem('etf-sell-yield', String(val))
     syncSettings('sell_multiplier', 100 / val)
+  }
+
+  const resetSettings = () => {
+    updateBuyYield(6.25)
+    updateSellYield(3.125)
   }
 
   useEffect(() => {
@@ -369,12 +374,35 @@ export default function Home() {
                 border: '1px solid #E2E8F0',
                 borderRadius: 16,
                 padding: 24,
-                boxShadow: '0 10px 40px rgba(0,0,0,0.12)',
+                boxShadow: '0 20px 50px rgba(0,0,0,0.15)',
                 zIndex: 50,
-                minWidth: 320,
+                minWidth: 340,
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                  <span style={{ fontWeight: 700, fontSize: 16, color: '#0F172A' }}>系統偏好設定</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontWeight: 800, fontSize: 16, color: '#0F172A' }}>⚙️ 估值參數動態調整</span>
+                    <button 
+                      onClick={resetSettings}
+                      title="重置為初始值"
+                      style={{
+                        padding: 6,
+                        borderRadius: 6,
+                        color: '#94A3B8',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s',
+                        marginLeft: 4,
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = '#3B82F6'; e.currentTarget.style.background = '#EFF6FF' }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = '#94A3B8'; e.currentTarget.style.background = 'none' }}
+                    >
+                      <RotateCcw size={16} />
+                    </button>
+                  </div>
                   <button onClick={() => setShowSettings(false)} style={{ cursor: 'pointer', color: '#94A3B8', background: 'none', border: 'none' }}>
                     <X size={20} />
                   </button>
