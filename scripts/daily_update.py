@@ -44,6 +44,21 @@ def main():
     
     print(f"追蹤中的 ETF: {etf_list}")
     
+    # --- 新增：從 Supabase 讀取倍率設定 ---
+    buy_multiplier = 16.0
+    sell_multiplier = 32.0
+    try:
+        settings_resp = sb.table("system_settings").select("*").execute()
+        for row in settings_resp.data:
+            if row['key'] == 'buy_multiplier':
+                buy_multiplier = float(row['value'])
+            elif row['key'] == 'sell_multiplier':
+                sell_multiplier = float(row['value'])
+        print(f"使用設定倍率: Buy={buy_multiplier}, Sell={sell_multiplier}")
+    except Exception as e:
+        print(f"無法讀取 system_settings (可能尚未建立表)，使用預設值 16/32")
+    # -----------------------------------
+    
     # 2. 收集所有成份股（去重）
     all_stocks = set()
     etf_constituents_map = {}  # etf_id -> [stock_ids]
@@ -97,7 +112,7 @@ def main():
     for i, sid in enumerate(stock_list):
         print(f"  [{i+1}/{total}] {sid}...", end=" ")
         try:
-            data = engine.get_valuation_data(sid)
+            data = engine.get_valuation_data(sid, buy_multiplier=buy_multiplier, sell_multiplier=sell_multiplier)
             if "error" in data:
                 print(f"⚠ {data['error']}")
                 failed += 1

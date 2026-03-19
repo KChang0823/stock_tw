@@ -19,6 +19,10 @@ type Stock = {
   buy_high: number | null
   sell_low: number | null
   sell_high: number | null
+  cash_dividend_low: number | null
+  cash_dividend_high: number | null
+  stock_dividend_low: number | null
+  stock_dividend_high: number | null
   signal: string | null
   etf_sources: string | null
   updated_at: string | null
@@ -64,20 +68,62 @@ export default function Home() {
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [loading, setLoading] = useState(true)
   const [fontSize, setFontSize] = useState(20)
+  const [buyMultiplier, setBuyMultiplier] = useState(16)
   const [showSettings, setShowSettings] = useState(false)
   const [newEtfId, setNewEtfId] = useState('')
   const [addingEtf, setAddingEtf] = useState(false)
   const [addMsg, setAddMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
-  // 從 localStorage 讀取字級偏好
+  // 從 localStorage 與 API 讀取偏好
   useEffect(() => {
-    const saved = localStorage.getItem('etf-font-size')
-    if (saved) setFontSize(Number(saved))
+    const savedSize = localStorage.getItem('etf-font-size')
+    if (savedSize) setFontSize(Number(savedSize))
+    
+    // 優先從 API 讀取全域設定，失敗則用 localStorage 或預設
+    const loadSettings = async () => {
+      try {
+        const res = await fetch('/api/settings')
+        const data = await res.json()
+        if (data.buy_multiplier) {
+          setBuyMultiplier(data.buy_multiplier)
+          localStorage.setItem('etf-buy-multiplier', String(data.buy_multiplier))
+          return
+        }
+      } catch (err) {
+        console.error('Failed to load settings from API:', err)
+      }
+      
+      const savedMult = localStorage.getItem('etf-buy-multiplier')
+      if (savedMult) setBuyMultiplier(Number(savedMult))
+    }
+    
+    loadSettings()
   }, [])
 
   const updateFontSize = (size: number) => {
     setFontSize(size)
     localStorage.setItem('etf-font-size', String(size))
+  }
+
+  const updateBuyMultiplier = async (val: number) => {
+    setBuyMultiplier(val)
+    localStorage.setItem('etf-buy-multiplier', String(val))
+    
+    // 非同步同步到後端 (不阻塞 UI)
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'buy_multiplier', value: val }),
+      })
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'sell_multiplier', value: val * 2 }),
+      })
+    } catch (err) {
+      console.error('Failed to sync settings to API:', err)
+    }
   }
 
   useEffect(() => {
@@ -187,7 +233,41 @@ export default function Home() {
   const signalOrder: Record<string, number> = { '買': 0, '追蹤 (買)': 1, '追蹤 (賣)': 2, '賣': 3 }
 
   const filtered = useMemo(() => {
-    let list = stocks.filter(s => {
+    let list = stocks.map(s => {
+      // 核心估價重算邏輯 (與 Python ValuationEngine 同步)
+      const m = buyMultiplier
+      const sm = m * 2 // 32 / 16 = 2
+      
+      const calcPrice = (cash: number, stock: number, mult: number) => {
+        const adj = 1 + (stock / 10)
+        if (adj === 0) return 0
+        return (cash * mult) / adj
+      }
+
+      const bl = calcPrice(s.cash_dividend_low || 0, s.stock_dividend_low || 0, m)
+      const bh = calcPrice(s.cash_dividend_high || 0, s.stock_dividend_high || 0, m)
+      const sl = calcPrice(s.cash_dividend_low || 0, s.stock_dividend_low || 0, sm)
+      const sh = calcPrice(s.cash_dividend_high || 0, s.stock_dividend_high || 0, sm)
+
+      // 重新判斷訊號
+      let sig = ''
+      const p = s.current_price
+      if (p !== null) {
+        if (p < bl) sig = '買'
+        else if (p >= bl && p <= bh) sig = '追蹤 (買)'
+        else if (p >= sl && p <= sh) sig = '追蹤 (賣)'
+        else if (p > sh) sig = '賣'
+      }
+
+      return {
+        ...s,
+        buy_low: bl,
+        buy_high: bh,
+        sell_low: sl,
+        sell_high: sh,
+        signal: sig
+      }
+    }).filter(s => {
       if (selectedEtfs.size > 0) {
         const sources = s.etf_sources || ''
         const match = Array.from(selectedEtfs).some(id => sources.includes(id))
@@ -213,7 +293,7 @@ export default function Home() {
     })
 
     return list
-  }, [stocks, selectedEtfs, search, sortKey, sortDir])
+  }, [stocks, selectedEtfs, search, sortKey, sortDir, buyMultiplier])
 
   if (loading) {
     return (
@@ -240,7 +320,31 @@ export default function Home() {
         </div>
 
         {/* Settings button */}
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative', display: 'flex', gap: 12 }}>
+          {/* Multiplier Slider Panel */}
+          <div style={{ 
+            background: 'white', 
+            border: '1px solid #E2E8F0', 
+            borderRadius: 8, 
+            padding: '4px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+          }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>
+              目標位階 (買): <span style={{ color: '#3B82F6', width: 24, display: 'inline-block' }}>{buyMultiplier}x</span>
+            </span>
+            <input 
+              type="range" 
+              min="10" 
+              max="40" 
+              step="1"
+              value={buyMultiplier}
+              onChange={(e) => updateBuyMultiplier(Number(e.target.value))}
+              style={{ width: 120, cursor: 'pointer' }}
+            />
+          </div>
+
           <button
             onClick={() => setShowSettings(!showSettings)}
             style={{

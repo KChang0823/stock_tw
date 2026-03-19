@@ -6,8 +6,8 @@ class ValuationEngine:
     def __init__(self, data_loader: StockDataLoader):
         self.loader = data_loader
 
-    def get_valuation_data(self, stock_id: str):
-        # 0. 獲取現價
+    def get_valuation_data(self, stock_id: str, buy_multiplier: float = 16, sell_multiplier: float = 32):
+        # 0. 獲獲現價
         price_df = self.loader.get_stock_price(stock_id)
         current_price = price_df['close'].iloc[-1] if not price_df.empty else None
 
@@ -103,10 +103,10 @@ class ValuationEngine:
             if adj == 0: return 0
             return (cash_part * multiplier) / adj
             
-        buy_low = calc_price(part_c, part_e, 16)
-        buy_high = calc_price(part_d, part_f, 16)
-        sell_low = calc_price(part_c, part_e, 32)
-        sell_high = calc_price(part_d, part_f, 32)
+        buy_low = calc_price(part_c, part_e, buy_multiplier)
+        buy_high = calc_price(part_d, part_f, buy_multiplier)
+        sell_low = calc_price(part_c, part_e, sell_multiplier)
+        sell_high = calc_price(part_d, part_f, sell_multiplier)
         
         # 5. 判斷訊號
         signal = ""
