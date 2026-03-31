@@ -15,17 +15,30 @@
 
 ## 🚀 快速啟動
 
-
-### 1. 安裝環境
-建議使用 Python 3.9+ 環境：
+### 1. 後端（Python 估價腳本）
 ```bash
 pip install -r requirements.txt
+
+# 設定 Supabase 環境變數
+export SUPABASE_URL="your-supabase-url"
+export SUPABASE_KEY="your-supabase-key"
+
+# 手動執行一次估價更新
+python scripts/daily_update.py
 ```
 
-### 2. 啟動 App
+### 2. 前端（Next.js）
 ```bash
-streamlit run app.py
+cd web
+npm install
+
+# 建立 .env.local，填入 Supabase 連線資訊
+# NEXT_PUBLIC_SUPABASE_URL=...
+# NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+
+npm run dev
 ```
+
 
 ## 🛠 核心架構
 - `web/`: Next.js 前端，負責 UI 與即時估價重算。
