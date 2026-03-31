@@ -24,6 +24,7 @@ type Stock = {
   stock_dividend_low: number | null
   stock_dividend_high: number | null
   signal: string | null
+  consecutive_yoy: number | null
   etf_sources: string | null
   updated_at: string | null
 }
@@ -33,7 +34,7 @@ type Etf = {
   name: string
 }
 
-type SortKey = 'stock_id' | 'current_price' | 'signal'
+type SortKey = 'stock_id' | 'current_price' | 'signal' | 'consecutive_yoy'
 type SortDir = 'asc' | 'desc'
 
 const FONT_SIZES = [
@@ -303,6 +304,8 @@ export default function Home() {
         cmp = (a.current_price || 0) - (b.current_price || 0)
       } else if (sortKey === 'signal') {
         cmp = (signalOrder[a.signal || ''] ?? 99) - (signalOrder[b.signal || ''] ?? 99)
+      } else if (sortKey === 'consecutive_yoy') {
+        cmp = (a.consecutive_yoy || 0) - (b.consecutive_yoy || 0)
       }
       return sortDir === 'asc' ? cmp : -cmp
     })
@@ -616,6 +619,11 @@ export default function Home() {
                 </th>
                 <th style={{ textAlign: 'center' }}>買入區間</th>
                 <th style={{ textAlign: 'center' }}>賣出區間</th>
+                <th onClick={() => handleSort('consecutive_yoy')} style={{ cursor: 'pointer', textAlign: 'center' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    連增月數 <ArrowUpDown size={12} />
+                  </span>
+                </th>
                 <th>所屬 ETF</th>
               </tr>
             </thead>
@@ -646,6 +654,14 @@ export default function Home() {
                   </td>
                   <td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', color: '#DC2626' }}>
                     {stock.sell_low?.toFixed(1)} – {stock.sell_high?.toFixed(1)}
+                  </td>
+                  <td style={{
+                    textAlign: 'center',
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: (stock.consecutive_yoy || 0) >= 6 ? 700 : 400,
+                    color: (stock.consecutive_yoy || 0) >= 6 ? '#059669' : '#334155',
+                  }}>
+                    {stock.consecutive_yoy ?? 0}
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>

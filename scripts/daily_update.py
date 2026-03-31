@@ -140,6 +140,7 @@ def main():
                     "sell_low": sanitize_val(data["valuation"]["sell_low"]),
                     "sell_high": sanitize_val(data["valuation"]["sell_high"]),
                     "signal": data["signal"],
+                    "consecutive_yoy": int(data.get("consecutive_yoy", 0)),
                     "etf_sources": etf_sources,
                     "updated_at": datetime.datetime.now().isoformat()
                 }

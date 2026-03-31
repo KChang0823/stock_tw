@@ -108,7 +108,10 @@ class ValuationEngine:
         sell_low = calc_price(part_c, part_e, sell_multiplier)
         sell_high = calc_price(part_d, part_f, sell_multiplier)
         
-        # 5. 判斷訊號
+        # 5. 營收動能
+        consecutive_yoy = self.loader.get_consecutive_positive_yoy_months(stock_id)
+
+        # 6. 判斷訊號
         signal = ""
         if current_price is not None:
             if current_price < buy_low:
@@ -136,7 +139,8 @@ class ValuationEngine:
                 "sell_low": sell_low,
                 "sell_high": sell_high
             },
-            "signal": signal
+            "signal": signal,
+            "consecutive_yoy": consecutive_yoy
         }
 
 if __name__ == "__main__":

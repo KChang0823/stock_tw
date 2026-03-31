@@ -161,6 +161,33 @@ class StockDataLoader:
                 continue
             
         return pd.DataFrame()
+    def get_consecutive_positive_yoy_months(self, stock_id: str) -> int:
+        """計算最近連續幾個月的營收 YoY 為正（嚴格 > 0）"""
+        current_year = datetime.date.today().year
+        start_date = f"{current_year - 10}-01-01"
+
+        try:
+            df = self.api.taiwan_stock_month_revenue(
+                stock_id=stock_id,
+                start_date=start_date
+            )
+        except Exception:
+            return 0
+
+        if df.empty or len(df) < 13:
+            return 0
+
+        df = df.sort_values('date').reset_index(drop=True)
+        df['revenue_yoy'] = df['revenue'].pct_change(periods=12)
+
+        count = 0
+        for _, row in df.dropna(subset=['revenue_yoy']).sort_values('date', ascending=False).iterrows():
+            if row['revenue_yoy'] > 0:
+                count += 1
+            else:
+                break
+        return count
+
     def get_etf_constituents(self, etf_id: str):
         """抓取 ETF 成份股列表 (使用 MoneyDJ SSR 頁面)"""
         import requests
