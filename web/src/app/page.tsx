@@ -53,11 +53,11 @@ function getSignalClass(signal: string | null) {
 }
 
 function getSignalDot(signal: string | null) {
-  if (!signal) return '#94A3B8'
-  if (signal === '買') return '#059669'
-  if (signal === '賣') return '#DC2626'
-  if (signal.includes('追蹤')) return '#D97706'
-  return '#94A3B8'
+  if (!signal) return 'var(--text-muted)'
+  if (signal === '買') return 'var(--accent-green)'
+  if (signal === '賣') return 'var(--accent-red)'
+  if (signal.includes('追蹤')) return 'var(--accent-amber)'
+  return 'var(--text-muted)'
 }
 
 export default function Home() {
@@ -69,19 +69,17 @@ export default function Home() {
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [loading, setLoading] = useState(true)
   const [fontSize, setFontSize] = useState(20)
-  const [buyYield, setBuyYield] = useState(6.25) // 100/16
-  const [sellYield, setSellYield] = useState(3.125) // 100/32
+  const [buyYield, setBuyYield] = useState(6.25)
+  const [sellYield, setSellYield] = useState(3.125)
   const [showSettings, setShowSettings] = useState(false)
   const [newEtfId, setNewEtfId] = useState('')
   const [addingEtf, setAddingEtf] = useState(false)
   const [addMsg, setAddMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
-  // 從 localStorage 與 API 讀取偏好
   useEffect(() => {
     const savedSize = localStorage.getItem('etf-font-size')
     if (savedSize) setFontSize(Number(savedSize))
-    
-    // 優先從 API 讀取全域設定
+
     const loadSettings = async () => {
       try {
         const res = await fetch('/api/settings')
@@ -96,17 +94,17 @@ export default function Home() {
           setSellYield(Number(sy.toFixed(3)))
           localStorage.setItem('etf-sell-yield', String(sy))
         }
-        if (data.buy_multiplier) return // 已從 API 載入
+        if (data.buy_multiplier) return
       } catch (err) {
         console.error('Failed to load settings from API:', err)
       }
-      
+
       const savedBY = localStorage.getItem('etf-buy-yield')
       if (savedBY) setBuyYield(Number(savedBY))
       const savedSY = localStorage.getItem('etf-sell-yield')
       if (savedSY) setSellYield(Number(savedSY))
     }
-    
+
     loadSettings()
   }, [])
 
@@ -216,7 +214,6 @@ export default function Home() {
                 } else {
                   setAddMsg({ type: 'ok', text: data.step })
                   setNewEtfId('')
-                  // 重新載入資料
                   const sb = getSupabase()
                   const [etfRes, stockRes] = await Promise.all([
                     sb.from('tracked_etfs').select('*'),
@@ -252,7 +249,6 @@ export default function Home() {
 
   const filtered = useMemo(() => {
     let list = stocks.map(s => {
-      // 核心估價重算邏輯 (與 Python ValuationEngine 同步)
       const calcPrice = (cash: number, stock: number, yieldPct: number) => {
         const mult = 100 / yieldPct
         const adj = 1 + (stock / 10)
@@ -265,7 +261,6 @@ export default function Home() {
       const sl = calcPrice(s.cash_dividend_low || 0, s.stock_dividend_low || 0, sellYield)
       const sh = calcPrice(s.cash_dividend_high || 0, s.stock_dividend_high || 0, sellYield)
 
-      // 重新判斷訊號
       let sig = ''
       const p = s.current_price
       if (p !== null) {
@@ -275,14 +270,7 @@ export default function Home() {
         else if (p > sh) sig = '賣'
       }
 
-      return {
-        ...s,
-        buy_low: bl,
-        buy_high: bh,
-        sell_low: sl,
-        sell_high: sh,
-        signal: sig
-      }
+      return { ...s, buy_low: bl, buy_high: bh, sell_low: sl, sell_high: sh, signal: sig }
     }).filter(s => {
       if (selectedEtfs.size > 0) {
         const sources = s.etf_sources || ''
@@ -315,164 +303,96 @@ export default function Home() {
 
   if (loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p style={{ color: '#64748B', fontSize: 14 }}>載入資料中...</p>
+      <main className="loading-container">
+        <div style={{ textAlign: 'center' }}>
+          <div className="loading-spinner" />
+          <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>載入資料中...</p>
         </div>
       </main>
     )
   }
 
   return (
-    <main className="min-h-screen bg-[#F8FAFC]">
-      <div style={{ 
-        maxWidth: 1440, 
-        margin: '0 auto', 
-        padding: '32px 40px', 
-        fontSize 
-      }}>
-        {/* Header */}
-        <header style={{ marginBottom: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+    <main style={{ background: 'var(--bg-page)', minHeight: '100vh' }}>
+      <div className="page-container" style={{ fontSize }}>
+
+        {/* ── Header ── */}
+        <header className="page-header">
           <div>
-            <h1 style={{ fontSize: fontSize * 1.6, fontWeight: 700, color: '#0F172A', marginBottom: 4 }}>
-              ETF 成份股篩選器
-            </h1>
-            <p style={{ fontSize: fontSize * 0.9, color: '#64748B' }}>
+            <h1 className="page-title">ETF 成份股篩選器</h1>
+            <p className="page-subtitle">
               高股息 ETF 成份股估值追蹤 · 共 {filtered.length} 檔
             </p>
           </div>
 
-          {/* Settings button */}
           <div style={{ position: 'relative' }}>
             <button
               onClick={() => setShowSettings(!showSettings)}
-              style={{
-                padding: '8px 16px',
-                borderRadius: 8,
-                border: '1px solid #E2E8F0',
-                background: showSettings ? '#F1F5F9' : 'white',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                fontSize: 14,
-                fontWeight: 600,
-                color: '#475569',
-                transition: 'all 0.2s',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-              }}
+              className={`settings-btn ${showSettings ? 'active' : ''}`}
             >
               <Settings size={18} />
               設定
             </button>
 
             {showSettings && (
-              <div style={{
-                position: 'absolute',
-                top: '100%',
-                right: 0,
-                marginTop: 12,
-                background: 'white',
-                border: '1px solid #E2E8F0',
-                borderRadius: 16,
-                padding: 24,
-                boxShadow: '0 20px 50px rgba(0,0,0,0.15)',
-                zIndex: 50,
-                minWidth: 340,
-              }}>
+              <div className="settings-panel">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontWeight: 800, fontSize: 16, color: '#0F172A' }}>⚙️ 估值參數動態調整</span>
-                    <button 
-                      onClick={resetSettings}
-                      title="重置為初始值"
-                      style={{
-                        padding: 6,
-                        borderRadius: 6,
-                        color: '#94A3B8',
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'all 0.2s',
-                        marginLeft: 4,
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.color = '#3B82F6'; e.currentTarget.style.background = '#EFF6FF' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.color = '#94A3B8'; e.currentTarget.style.background = 'none' }}
-                    >
-                      <RotateCcw size={16} />
+                  <div className="settings-title">
+                    ⚙️ 估值參數調整
+                    <button onClick={resetSettings} title="重置為初始值" className="settings-reset-btn">
+                      <RotateCcw size={15} />
                     </button>
                   </div>
-                  <button onClick={() => setShowSettings(false)} style={{ cursor: 'pointer', color: '#94A3B8', background: 'none', border: 'none' }}>
-                    <X size={20} />
+                  <button onClick={() => setShowSettings(false)} className="settings-close-btn">
+                    <X size={18} />
                   </button>
                 </div>
 
-                {/* Buy Yield Slider */}
-                <div style={{ marginBottom: 24 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: '#475569' }}>買入目標殖利率</span>
+                {/* Buy Yield */}
+                <div style={{ marginBottom: 22 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <span className="settings-label">買入目標殖利率</span>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: '#3B82F6' }}>{buyYield.toFixed(2)}%</div>
-                      <div style={{ fontSize: 12, color: '#94A3B8' }}>相當於 {(100 / buyYield).toFixed(1)} 倍</div>
+                      <div className="yield-value" style={{ color: 'var(--accent-blue)' }}>{buyYield.toFixed(2)}%</div>
+                      <div className="yield-sub">相當於 {(100 / buyYield).toFixed(1)} 倍</div>
                     </div>
                   </div>
-                  <input 
-                    type="range" 
-                    min="3" 
-                    max="12" 
-                    step="0.25"
+                  <input
+                    type="range" min="3" max="12" step="0.25"
                     value={buyYield}
                     onChange={(e) => updateBuyYield(Number(e.target.value))}
-                    style={{ width: '100%', cursor: 'pointer', accentColor: '#3B82F6' }}
+                    className="yield-slider buy"
                   />
                 </div>
 
-                {/* Sell Yield Slider */}
-                <div style={{ marginBottom: 24 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: '#475569' }}>賣出目標殖利率</span>
+                {/* Sell Yield */}
+                <div style={{ marginBottom: 22 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <span className="settings-label">賣出目標殖利率</span>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: '#EF4444' }}>{sellYield.toFixed(2)}%</div>
-                      <div style={{ fontSize: 12, color: '#94A3B8' }}>相當於 {(100 / sellYield).toFixed(1)} 倍</div>
+                      <div className="yield-value" style={{ color: 'var(--accent-red)' }}>{sellYield.toFixed(2)}%</div>
+                      <div className="yield-sub">相當於 {(100 / sellYield).toFixed(1)} 倍</div>
                     </div>
                   </div>
-                  <input 
-                    type="range" 
-                    min="1" 
-                    max="8" 
-                    step="0.125"
+                  <input
+                    type="range" min="1" max="8" step="0.125"
                     value={sellYield}
                     onChange={(e) => updateSellYield(Number(e.target.value))}
-                    style={{ width: '100%', cursor: 'pointer', accentColor: '#EF4444' }}
+                    className="yield-slider sell"
                   />
                 </div>
 
-                <div style={{ height: 1, background: '#F1F5F9', margin: '0 -24px 20px' }} />
+                <div className="settings-divider" />
 
-                {/* Font Size Selector */}
+                {/* Font Size */}
                 <div>
-                  <span style={{ fontWeight: 600, fontSize: 14, color: '#475569', display: 'block', marginBottom: 12 }}>介面字體大小</span>
+                  <span className="settings-label" style={{ display: 'block', marginBottom: 10 }}>介面字體大小</span>
                   <div style={{ display: 'flex', gap: 8 }}>
                     {FONT_SIZES.map(s => (
                       <button
                         key={s.value}
                         onClick={() => updateFontSize(s.value)}
-                        style={{
-                          flex: 1,
-                          padding: '10px 0',
-                          borderRadius: 8,
-                          border: fontSize === s.value ? '2px solid #3B82F6' : '1px solid #E2E8F0',
-                          background: fontSize === s.value ? '#EFF6FF' : 'white',
-                          color: fontSize === s.value ? '#3B82F6' : '#475569',
-                          fontWeight: fontSize === s.value ? 700 : 500,
-                          cursor: 'pointer',
-                          fontSize: 13,
-                          transition: 'all 0.15s',
-                        }}
+                        className={`font-size-btn ${fontSize === s.value ? 'active' : ''}`}
                       >
                         {s.label}
                       </button>
@@ -484,212 +404,143 @@ export default function Home() {
           </div>
         </header>
 
-      {/* Search + ETF Chips */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ position: 'relative', marginBottom: 16 }}>
-          <Search
-            style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }}
-            size={18}
-          />
-          <input
-            type="text"
-            placeholder="搜尋股票代號或公司名..."
-            className="search-input"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          {etfs.map(etf => (
-            <button
-              key={etf.etf_id}
-              className={`etf-chip ${selectedEtfs.has(etf.etf_id) ? 'active' : ''}`}
-              onClick={() => toggleEtf(etf.etf_id)}
-            >
-              {etf.etf_id}
-              <span style={{ opacity: 0.7 }}>{etf.name}</span>
-            </button>
-          ))}
-
-          {/* 新增 ETF */}
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        {/* ── Search + ETF Chips ── */}
+        <div style={{ marginBottom: 24 }}>
+          <div className="search-wrapper">
+            <Search className="search-icon" size={18} />
             <input
               type="text"
-              placeholder="輸入 ETF 代號"
-              value={newEtfId}
-              onChange={e => setNewEtfId(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && addEtf()}
-              disabled={addingEtf}
-              style={{
-                width: 120,
-                padding: '6px 12px',
-                borderRadius: 9999,
-                border: '1px solid #E2E8F0',
-                fontSize: 13,
-                outline: 'none',
-              }}
+              placeholder="搜尋股票代號或公司名..."
+              className="search-input"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
             />
-            <button
-              onClick={addEtf}
-              disabled={addingEtf || !newEtfId.trim()}
-              style={{
-                padding: '6px 12px',
-                borderRadius: 9999,
-                border: '1px solid #3B82F6',
-                background: '#3B82F6',
-                color: 'white',
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: addingEtf || !newEtfId.trim() ? 'not-allowed' : 'pointer',
-                opacity: addingEtf || !newEtfId.trim() ? 0.5 : 1,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                transition: 'opacity 0.2s',
-              }}
-            >
-              {addingEtf ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-              匯入
-            </button>
           </div>
+
+          <div className="etf-chips">
+            {etfs.map(etf => (
+              <button
+                key={etf.etf_id}
+                className={`etf-chip ${selectedEtfs.has(etf.etf_id) ? 'active' : ''}`}
+                onClick={() => toggleEtf(etf.etf_id)}
+              >
+                {etf.etf_id}
+                <span style={{ opacity: 0.7 }}>{etf.name}</span>
+              </button>
+            ))}
+
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <input
+                type="text"
+                placeholder="ETF 代號"
+                value={newEtfId}
+                onChange={e => setNewEtfId(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addEtf()}
+                disabled={addingEtf}
+                className="add-etf-input"
+              />
+              <button
+                onClick={addEtf}
+                disabled={addingEtf || !newEtfId.trim()}
+                className="add-etf-btn"
+              >
+                {addingEtf ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                匯入
+              </button>
+            </div>
+          </div>
+
+          {/* Progress */}
+          {addingEtf && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{addStep}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{addProgress}%</span>
+              </div>
+              <div className="progress-bar-track">
+                <div className="progress-bar-fill" style={{ width: `${addProgress}%` }} />
+              </div>
+            </div>
+          )}
+
+          {addMsg && (
+            <div className={`result-msg ${addMsg.type === 'ok' ? 'ok' : 'err'}`}>
+              {addMsg.text}
+            </div>
+          )}
         </div>
 
-        {/* 進度條 */}
-        {addingEtf && (
-          <div style={{ marginTop: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span style={{ fontSize: 13, color: '#475569' }}>{addStep}</span>
-              <span style={{ fontSize: 12, color: '#94A3B8' }}>{addProgress}%</span>
-            </div>
-            <div style={{ height: 6, borderRadius: 3, background: '#E2E8F0', overflow: 'hidden' }}>
-              <div style={{
-                height: '100%',
-                width: `${addProgress}%`,
-                borderRadius: 3,
-                background: 'linear-gradient(90deg, #3B82F6, #60A5FA)',
-                transition: 'width 0.4s ease',
-              }} />
-            </div>
-          </div>
-        )}
-
-        {/* 匯入結果訊息 */}
-        {addMsg && (
-          <div style={{
-            marginTop: 8,
-            padding: '8px 14px',
-            borderRadius: 8,
-            fontSize: 13,
-            background: addMsg.type === 'ok' ? '#ECFDF5' : '#FEF2F2',
-            color: addMsg.type === 'ok' ? '#059669' : '#DC2626',
-          }}>
-            {addMsg.text}
-          </div>
-        )}
-      </div>
-
-      {/* Table */}
-      <div style={{
-        background: 'white',
-        borderRadius: 12,
-        border: '1px solid #E2E8F0',
-        overflow: 'hidden',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-      }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="data-table" style={{ fontSize }}>
-            <thead>
-              <tr>
-                <th onClick={() => handleSort('stock_id')} style={{ cursor: 'pointer' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    代號 <ArrowUpDown size={12} />
-                  </span>
-                </th>
-                <th>公司名</th>
-                <th onClick={() => handleSort('signal')} style={{ cursor: 'pointer' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    訊號 <ArrowUpDown size={12} />
-                  </span>
-                </th>
-                <th style={{ textAlign: 'right' }} onClick={() => handleSort('current_price')} className="cursor-pointer">
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
-                    現價 <ArrowUpDown size={12} />
-                  </span>
-                </th>
-                <th style={{ textAlign: 'center' }}>買入區間</th>
-                <th style={{ textAlign: 'center' }}>賣出區間</th>
-                <th onClick={() => handleSort('consecutive_yoy')} style={{ cursor: 'pointer', textAlign: 'center' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    連增月數 <ArrowUpDown size={12} />
-                  </span>
-                </th>
-                <th>所屬 ETF</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((stock) => (
-                <tr key={stock.stock_id}>
-                  <td>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-                      {stock.stock_id}
-                    </span>
-                  </td>
-                  <td style={{ color: '#334155' }}>
-                    {stock.company_name || '—'}
-                  </td>
-                  <td>
-                    <span className={getSignalClass(stock.signal)}>
-                      <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                        <circle cx="4" cy="4" r="4" fill={getSignalDot(stock.signal)} />
-                      </svg>
-                      {stock.signal || '—'}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: '#334155' }}>
-                    {stock.current_price?.toLocaleString() ?? '—'}
-                  </td>
-                  <td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', color: '#059669' }}>
-                    {stock.buy_low?.toFixed(1)} – {stock.buy_high?.toFixed(1)}
-                  </td>
-                  <td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', color: '#DC2626' }}>
-                    {stock.sell_low?.toFixed(1)} – {stock.sell_high?.toFixed(1)}
-                  </td>
-                  <td style={{
-                    textAlign: 'center',
-                    fontFamily: 'var(--font-mono)',
-                    fontWeight: (stock.consecutive_yoy || 0) >= 6 ? 700 : 400,
-                    color: (stock.consecutive_yoy || 0) >= 6 ? '#059669' : '#334155',
-                  }}>
-                    {stock.consecutive_yoy ?? 0}
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                      {(stock.etf_sources || '').split(',').map(id => id.trim()).filter(Boolean).map(id => (
-                        <span key={id} style={{
-                          fontSize: fontSize * 0.75,
-                          padding: '2px 8px',
-                          borderRadius: 4,
-                          background: '#F1F5F9',
-                          color: '#475569',
-                          fontWeight: 500,
-                        }}>
-                          {id}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
+        {/* ── Table ── */}
+        <div className="table-wrapper">
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data-table" style={{ fontSize }}>
+              <thead>
+                <tr>
+                  <th className="sortable-th" onClick={() => handleSort('stock_id')}>
+                    <span className="th-content">代號 <ArrowUpDown size={12} /></span>
+                  </th>
+                  <th>公司名</th>
+                  <th className="sortable-th" onClick={() => handleSort('signal')}>
+                    <span className="th-content">訊號 <ArrowUpDown size={12} /></span>
+                  </th>
+                  <th className="sortable-th" onClick={() => handleSort('current_price')} style={{ textAlign: 'right' }}>
+                    <span className="th-content" style={{ justifyContent: 'flex-end' }}>現價 <ArrowUpDown size={12} /></span>
+                  </th>
+                  <th style={{ textAlign: 'center' }}>買入區間</th>
+                  <th style={{ textAlign: 'center' }}>賣出區間</th>
+                  <th className="sortable-th" onClick={() => handleSort('consecutive_yoy')} style={{ textAlign: 'center' }}>
+                    <span className="th-content" style={{ justifyContent: 'center' }}>連增月數 <ArrowUpDown size={12} /></span>
+                  </th>
+                  <th>所屬 ETF</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map((stock) => (
+                  <tr key={stock.stock_id}>
+                    <td>
+                      <span className="cell-stock-id">{stock.stock_id}</span>
+                    </td>
+                    <td className="cell-company">
+                      {stock.company_name || '—'}
+                    </td>
+                    <td>
+                      <span className={getSignalClass(stock.signal)}>
+                        <svg width="7" height="7" viewBox="0 0 8 8" fill="none">
+                          <circle cx="4" cy="4" r="4" fill={getSignalDot(stock.signal)} />
+                        </svg>
+                        {stock.signal || '—'}
+                      </span>
+                    </td>
+                    <td className="cell-price">
+                      {stock.current_price?.toLocaleString() ?? '—'}
+                    </td>
+                    <td className="cell-range-green">
+                      {stock.buy_low?.toFixed(1)} – {stock.buy_high?.toFixed(1)}
+                    </td>
+                    <td className="cell-range-red">
+                      {stock.sell_low?.toFixed(1)} – {stock.sell_high?.toFixed(1)}
+                    </td>
+                    <td className={`cell-yoy ${(stock.consecutive_yoy || 0) >= 6 ? 'strong' : 'normal'}`}>
+                      {stock.consecutive_yoy ?? 0}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {(stock.etf_sources || '').split(',').map(id => id.trim()).filter(Boolean).map(id => (
+                          <span key={id} className="etf-tag">{id}</span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
 
-      {/* Footer */}
-      <footer style={{ marginTop: 16, fontSize: fontSize * 0.8, color: '#94A3B8' }}>
-        最後更新：{stocks[0]?.updated_at ? new Date(stocks[0].updated_at).toLocaleString('zh-TW') : '—'}
-      </footer>
+        {/* ── Footer ── */}
+        <footer className="page-footer">
+          最後更新：{stocks[0]?.updated_at ? new Date(stocks[0].updated_at).toLocaleString('zh-TW') : '—'}
+        </footer>
       </div>
     </main>
   )
