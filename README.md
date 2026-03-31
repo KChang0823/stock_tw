@@ -1,57 +1,73 @@
-# 📈 台灣高股息價值選股器 (Stock Valuation Tool)
+# 📈 台灣高股息價值選股器
 
-基於 **FinMind Data API** 與專業 **四分位階估價模型** 打造的自動化選股工具。本專案能自動推估 EPS、預測股利，並計算出精確的買賣位階。
+自動化的台股估值篩選工具。從高股息 ETF 出發，自動拆解成份股，透過四分位階估價模型計算每檔股票的合理買賣區間，並追蹤營收成長動能，每日自動更新。
 
-## ✨ 特色功能
-- **ETF 模式支援**：完整支援 0050、00878、00929 等熱門 ETF，自動解析成分股並修正中文亂碼。
-- **動態殖利率估價**：買入/賣出殖利率滑桿與「一鍵重置」功能，支援即時位階試算。
-- **營收動能追蹤**：自動計算每檔股票「連續幾個月營收 YoY 為正」，前端可排序，≥6 個月綠色強調。
-- **數據備援機制**：深度整合 FinMind 與 yfinance，支援上櫃 (.TWO) 及無配息股票（如 2498）。
-- **頂級 Fintech UI**：深色模式玻璃擬態設計，優化大字體排版（28px-48px）與響應式佈局。
+## ✨ 功能特色
 
+- **ETF 成份股拆解**：輸入 ETF 代號（0050、00878、00929 等），自動解析全部成份股
+- **四分位階估價**：根據預估 EPS 與股利，計算出買入 / 賣出價格區間
+- **動態殖利率調整**：前端提供殖利率滑桿，即時重算所有估價位階
+- **營收動能指標**：計算每檔股票連續幾個月營收 YoY 為正，快速辨識成長趨勢
+- **每日自動更新**：GitHub Actions 於台灣時間每日 13:30 自動跑估價，寫入 Supabase
+- **FinMind + yfinance 雙源備援**：主要資料來自 FinMind，上櫃或缺資料自動切換 yfinance
 
-## ⏰ 自動化更新
-本專案透過 GitHub Actions 於 **每日下午 1:30 (台灣時間)** 自動觸發數據重新計算，確保估價資訊與市場同步。
+## 🏗 系統架構
 
-## 🚀 快速啟動
-
-### 1. 後端（Python 估價腳本）
-```bash
-pip install -r requirements.txt
-
-# 設定 Supabase 環境變數
-export SUPABASE_URL="your-supabase-url"
-export SUPABASE_KEY="your-supabase-key"
-
-# 手動執行一次估價更新
-python scripts/daily_update.py
+```
+┌─────────────────────────────┐
+│  GitHub Actions (每日排程)    │
+│  scripts/daily_update.py    │
+└──────────┬──────────────────┘
+           │ 抓資料 & 計算估價
+           ▼
+┌──────────────────┐    ┌──────────────┐
+│  FinMind API     │    │  yfinance    │
+│  (月營收/EPS/股利) │    │  (備援資料源)  │
+└──────────┬───────┘    └──────┬───────┘
+           │                   │
+           ▼                   ▼
+      data_loader.py ◄─────────┘
+           │
+           ▼
+    valuation_engine.py  (四分位階估價 + 營收動能)
+           │
+           ▼
+┌──────────────────┐
+│    Supabase      │
+│  (stock_valuations│
+│   tracked_etfs)  │
+└──────────┬───────┘
+           │
+           ▼
+┌──────────────────┐
+│  Next.js 前端     │
+│  (Vercel 部署)    │
+│  web/            │
+└──────────────────┘
 ```
 
-### 2. 前端（Next.js）
-```bash
-cd web
-npm install
+## 📂 專案結構
 
-# 建立 .env.local，填入 Supabase 連線資訊
-# NEXT_PUBLIC_SUPABASE_URL=...
-# NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+| 路徑 | 說明 |
+| --- | --- |
+| `data_loader.py` | 資料層 — FinMind / yfinance 雙源抓取 EPS、股利、月營收、ETF 成份股 |
+| `valuation_engine.py` | 邏輯層 — 四分位階估價公式、訊號判斷、連續正 YoY 月數計算 |
+| `scripts/daily_update.py` | 排程腳本 — 批次估價所有成份股並寫入 Supabase |
+| `scripts/supabase_client.py` | Supabase 連線工具 |
+| `web/` | Next.js 前端 — 搜尋、篩選、排序、即時殖利率重算 |
+| `web/src/app/api/` | Next.js API Routes — ETF 匯入、估值參數設定 |
+| `.github/workflows/` | GitHub Actions 每日排程設定 |
+| `邏輯.md` | 核心估價公式詳細推導與範例 |
 
-npm run dev
-```
+## 📊 估價公式
 
+詳見 [邏輯.md](./邏輯.md)，核心概念：
 
-## 🛠 核心架構
-- `web/`: Next.js 前端，負責 UI 與即時估價重算。
-- `valuation_engine.py`: 邏輯層，實作所有核心估價公式與營收動能計算。
-- `data_loader.py`: 資料層，透過 FinMind API 獲取財報、股價及月營收數據。
-- `scripts/daily_update.py`: 每日排程腳本，批次估價並寫入 Supabase。
-- `邏輯.md`: 專案核心計算邏輯與公式定義說明文件。
-
-## 📊 估價公式參考
-詳細公式請參閱 [邏輯.md](./邏輯.md)。核心概念：
-- **買入位階**：現金股利 × 16 倍 (對應 6.25% 殖利率)
-- **賣出位階**：現金股利 × 32 倍 (對應 3.125% 殖利率)
-- **除權修正**：1 + (股票股利 / 10)
+- **買入位階**：預估現金股利 × 16 倍（對應 6.25% 殖利率）
+- **賣出位階**：預估現金股利 × 32 倍（對應 3.125% 殖利率）
+- **除權修正**：÷ (1 + 股票股利 / 10)
+- **營收動能**：從 FinMind 月營收資料計算 YoY，回推連續正成長月數
 
 ## ⚖️ 免責聲明
+
 本專案僅供開發與邏輯驗證參考，不構成任何投資建議。投資一定有風險，投資前請審慎評估。
