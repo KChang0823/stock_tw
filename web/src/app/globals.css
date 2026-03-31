@@ -567,21 +567,232 @@ body {
   color: var(--accent-red);
 }
 
+/* ── Mobile Sort Bar ── */
+.mobile-sort-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.mobile-sort-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.mobile-sort-select-wrapper {
+  position: relative;
+  flex: 1;
+}
+
+.mobile-sort-select {
+  width: 100%;
+  appearance: none;
+  padding: 8px 30px 8px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-page);
+  font-size: 13px;
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.mobile-sort-chevron {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.mobile-sort-dir-btn {
+  padding: 8px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-page);
+  font-size: 13px;
+  font-family: var(--font-sans);
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.mobile-sort-dir-btn:active {
+  background: var(--bg-muted);
+}
+
+/* ── Stock Card (Mobile) ── */
+.stock-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.stock-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  transition: box-shadow 0.15s ease;
+}
+
+.stock-card:active {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.stock-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-3);
+}
+
+.stock-card-id-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.stock-card-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.stock-card-price,
+.stock-card-metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-2) 0;
+}
+
+.stock-card-price {
+  grid-column: 1 / -1;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-muted);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-1);
+}
+
+.stock-card-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.stock-card-value {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.stock-card-value.green { color: var(--accent-green); }
+.stock-card-value.red { color: var(--accent-red); }
+.stock-card-value.green-bold { color: var(--accent-green); font-weight: 700; }
+
+.stock-card-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
 /* ── Responsive ── */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
+  .page-container {
+    padding: var(--space-5) var(--space-4);
+  }
+
   .page-header {
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-3);
   }
 
+  .page-title {
+    font-size: 1.4rem;
+  }
+
+  /* Settings panel full-width on mobile */
   .settings-panel {
-    min-width: 300px;
-    right: -20px;
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    min-width: unset;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.15);
+    max-height: 85vh;
+    overflow-y: auto;
   }
 
-  .data-table thead th,
-  .data-table tbody td {
-    padding: 10px 12px;
+  /* Search full-width */
+  .search-input {
+    max-width: 100%;
+  }
+
+  /* ETF chips horizontal scroll */
+  .etf-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: var(--space-2);
+  }
+
+  .etf-chips::-webkit-scrollbar {
+    display: none;
+  }
+
+  .etf-chip {
+    flex-shrink: 0;
+    min-height: 44px;
+    padding: 10px 18px;
+  }
+
+  /* Add ETF controls */
+  .add-etf-input {
+    min-height: 44px;
+    font-size: 16px; /* prevent iOS zoom */
+  }
+
+  .add-etf-btn {
+    min-height: 44px;
+    padding: 10px 16px;
+  }
+
+  /* Settings button */
+  .settings-btn {
+    min-height: 44px;
+    padding: 10px 16px;
+  }
+
+  /* Font size buttons */
+  .font-size-btn {
+    min-height: 44px;
+  }
+}
+
+@media (min-width: 768px) {
+  .mobile-sort-bar {
+    display: none;
   }
 }
 
@@ -590,4 +801,9 @@ body {
   .data-table tbody tr {
     transition: background 0.1s ease;
   }
+
+  .stock-card {
+    transition: box-shadow 0.15s ease;
+  }
 }
+

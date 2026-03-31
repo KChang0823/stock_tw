@@ -1,8 +1,20 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
-import { Search, ArrowUpDown, Settings, X, Plus, Loader2, RotateCcw } from 'lucide-react'
+import { Search, ArrowUpDown, Settings, X, Plus, Loader2, RotateCcw, ChevronDown } from 'lucide-react'
+
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`)
+    setIsMobile(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [breakpoint])
+  return isMobile
+}
 
 function getSupabase() {
   return createClient(
@@ -60,7 +72,62 @@ function getSignalDot(signal: string | null) {
   return 'var(--text-muted)'
 }
 
+function StockCard({ stock, fontSize }: { stock: Stock & { signal: string }, fontSize: number }) {
+  const yoy = stock.consecutive_yoy || 0
+  return (
+    <div className="stock-card">
+      <div className="stock-card-header">
+        <div className="stock-card-id-row">
+          <span className="cell-stock-id" style={{ fontSize: fontSize * 0.95 }}>{stock.stock_id}</span>
+          <span className="cell-company" style={{ fontSize: fontSize * 0.8 }}>{stock.company_name || ''}</span>
+        </div>
+        <span className={getSignalClass(stock.signal)}>
+          <svg width="7" height="7" viewBox="0 0 8 8" fill="none">
+            <circle cx="4" cy="4" r="4" fill={getSignalDot(stock.signal)} />
+          </svg>
+          {stock.signal || '—'}
+        </span>
+      </div>
+
+      <div className="stock-card-body">
+        <div className="stock-card-price">
+          <span className="stock-card-label">現價</span>
+          <span className="stock-card-value">{stock.current_price?.toLocaleString() ?? '—'}</span>
+        </div>
+        <div className="stock-card-metric">
+          <span className="stock-card-label">買入</span>
+          <span className="stock-card-value green">{stock.buy_low?.toFixed(1)} – {stock.buy_high?.toFixed(1)}</span>
+        </div>
+        <div className="stock-card-metric">
+          <span className="stock-card-label">賣出</span>
+          <span className="stock-card-value red">{stock.sell_low?.toFixed(1)} – {stock.sell_high?.toFixed(1)}</span>
+        </div>
+        <div className="stock-card-metric">
+          <span className="stock-card-label">連增</span>
+          <span className={`stock-card-value ${yoy >= 6 ? 'green-bold' : ''}`}>{yoy}月</span>
+        </div>
+      </div>
+
+      {stock.etf_sources && (
+        <div className="stock-card-tags">
+          {stock.etf_sources.split(',').map(id => id.trim()).filter(Boolean).map(id => (
+            <span key={id} className="etf-tag">{id}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: 'signal', label: '訊號' },
+  { key: 'stock_id', label: '代號' },
+  { key: 'current_price', label: '現價' },
+  { key: 'consecutive_yoy', label: '連增月數' },
+]
+
 export default function Home() {
+  const isMobile = useIsMobile()
   const [etfs, setEtfs] = useState<Etf[]>([])
   const [stocks, setStocks] = useState<Stock[]>([])
   const [selectedEtfs, setSelectedEtfs] = useState<Set<string>>(new Set())
@@ -470,72 +537,105 @@ export default function Home() {
           )}
         </div>
 
-        {/* ── Table ── */}
-        <div className="table-wrapper">
-          <div style={{ overflowX: 'auto' }}>
-            <table className="data-table" style={{ fontSize }}>
-              <thead>
-                <tr>
-                  <th className="sortable-th" onClick={() => handleSort('stock_id')}>
-                    <span className="th-content">代號 <ArrowUpDown size={12} /></span>
-                  </th>
-                  <th>公司名</th>
-                  <th className="sortable-th" onClick={() => handleSort('signal')}>
-                    <span className="th-content">訊號 <ArrowUpDown size={12} /></span>
-                  </th>
-                  <th className="sortable-th" onClick={() => handleSort('current_price')} style={{ textAlign: 'right' }}>
-                    <span className="th-content" style={{ justifyContent: 'flex-end' }}>現價 <ArrowUpDown size={12} /></span>
-                  </th>
-                  <th style={{ textAlign: 'center' }}>買入區間</th>
-                  <th style={{ textAlign: 'center' }}>賣出區間</th>
-                  <th className="sortable-th" onClick={() => handleSort('consecutive_yoy')} style={{ textAlign: 'center' }}>
-                    <span className="th-content" style={{ justifyContent: 'center' }}>連增月數 <ArrowUpDown size={12} /></span>
-                  </th>
-                  <th>所屬 ETF</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((stock) => (
-                  <tr key={stock.stock_id}>
-                    <td>
-                      <span className="cell-stock-id">{stock.stock_id}</span>
-                    </td>
-                    <td className="cell-company">
-                      {stock.company_name || '—'}
-                    </td>
-                    <td>
-                      <span className={getSignalClass(stock.signal)}>
-                        <svg width="7" height="7" viewBox="0 0 8 8" fill="none">
-                          <circle cx="4" cy="4" r="4" fill={getSignalDot(stock.signal)} />
-                        </svg>
-                        {stock.signal || '—'}
-                      </span>
-                    </td>
-                    <td className="cell-price">
-                      {stock.current_price?.toLocaleString() ?? '—'}
-                    </td>
-                    <td className="cell-range-green">
-                      {stock.buy_low?.toFixed(1)} – {stock.buy_high?.toFixed(1)}
-                    </td>
-                    <td className="cell-range-red">
-                      {stock.sell_low?.toFixed(1)} – {stock.sell_high?.toFixed(1)}
-                    </td>
-                    <td className={`cell-yoy ${(stock.consecutive_yoy || 0) >= 6 ? 'strong' : 'normal'}`}>
-                      {stock.consecutive_yoy ?? 0}
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {(stock.etf_sources || '').split(',').map(id => id.trim()).filter(Boolean).map(id => (
-                          <span key={id} className="etf-tag">{id}</span>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
+        {/* ── Mobile Sort ── */}
+        {isMobile && (
+          <div className="mobile-sort-bar">
+            <span className="mobile-sort-label">排序</span>
+            <div className="mobile-sort-select-wrapper">
+              <select
+                value={sortKey}
+                onChange={e => handleSort(e.target.value as SortKey)}
+                className="mobile-sort-select"
+              >
+                {SORT_OPTIONS.map(o => (
+                  <option key={o.key} value={o.key}>{o.label}</option>
                 ))}
-              </tbody>
-            </table>
+              </select>
+              <ChevronDown size={14} className="mobile-sort-chevron" />
+            </div>
+            <button
+              onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+              className="mobile-sort-dir-btn"
+            >
+              {sortDir === 'asc' ? '↑ 升冪' : '↓ 降冪'}
+            </button>
           </div>
-        </div>
+        )}
+
+        {/* ── Data Display ── */}
+        {isMobile ? (
+          <div className="stock-card-list">
+            {filtered.map(stock => (
+              <StockCard key={stock.stock_id} stock={stock} fontSize={fontSize} />
+            ))}
+          </div>
+        ) : (
+          <div className="table-wrapper">
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table" style={{ fontSize }}>
+                <thead>
+                  <tr>
+                    <th className="sortable-th" onClick={() => handleSort('stock_id')}>
+                      <span className="th-content">代號 <ArrowUpDown size={12} /></span>
+                    </th>
+                    <th>公司名</th>
+                    <th className="sortable-th" onClick={() => handleSort('signal')}>
+                      <span className="th-content">訊號 <ArrowUpDown size={12} /></span>
+                    </th>
+                    <th className="sortable-th" onClick={() => handleSort('current_price')} style={{ textAlign: 'right' }}>
+                      <span className="th-content" style={{ justifyContent: 'flex-end' }}>現價 <ArrowUpDown size={12} /></span>
+                    </th>
+                    <th style={{ textAlign: 'center' }}>買入區間</th>
+                    <th style={{ textAlign: 'center' }}>賣出區間</th>
+                    <th className="sortable-th" onClick={() => handleSort('consecutive_yoy')} style={{ textAlign: 'center' }}>
+                      <span className="th-content" style={{ justifyContent: 'center' }}>連增月數 <ArrowUpDown size={12} /></span>
+                    </th>
+                    <th>所屬 ETF</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((stock) => (
+                    <tr key={stock.stock_id}>
+                      <td>
+                        <span className="cell-stock-id">{stock.stock_id}</span>
+                      </td>
+                      <td className="cell-company">
+                        {stock.company_name || '—'}
+                      </td>
+                      <td>
+                        <span className={getSignalClass(stock.signal)}>
+                          <svg width="7" height="7" viewBox="0 0 8 8" fill="none">
+                            <circle cx="4" cy="4" r="4" fill={getSignalDot(stock.signal)} />
+                          </svg>
+                          {stock.signal || '—'}
+                        </span>
+                      </td>
+                      <td className="cell-price">
+                        {stock.current_price?.toLocaleString() ?? '—'}
+                      </td>
+                      <td className="cell-range-green">
+                        {stock.buy_low?.toFixed(1)} – {stock.buy_high?.toFixed(1)}
+                      </td>
+                      <td className="cell-range-red">
+                        {stock.sell_low?.toFixed(1)} – {stock.sell_high?.toFixed(1)}
+                      </td>
+                      <td className={`cell-yoy ${(stock.consecutive_yoy || 0) >= 6 ? 'strong' : 'normal'}`}>
+                        {stock.consecutive_yoy ?? 0}
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {(stock.etf_sources || '').split(',').map(id => id.trim()).filter(Boolean).map(id => (
+                            <span key={id} className="etf-tag">{id}</span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* ── Footer ── */}
         <footer className="page-footer">
